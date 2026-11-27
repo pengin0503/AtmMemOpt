@@ -90,18 +90,25 @@ unfocusedFpsLimit = 15                 # M9b
 
 ## 6. 残タスク・次の確認事項
 
-1. **Phase 4 JAR の実機テスト（最優先）**
-   - `build/libs/atmmemopt-0.1.0.jar`（Phase 4 ビルド）を ATM10 の `mods` フォルダへ配置して起動・テストする。
+1. **Phase 4 JAR の実機テスト — 実施済み（2026-11-27、約44分セッション）**
+   - JEI フィルタ構築: `15.9秒 → 815ms`（目標達成）。
+   - ヒープ: 8,476 MB / 12,000 MB（Phase 3 水準を維持）。`PatchedDataComponentMap` は #10（3,039,639件 / 139.1 MB）で半減水準を維持。`DerivedComponentMap` / `ItemEnchantments` / `SpellContainer` / `CommonToken` は上位98件に不在。
+   - 全モジュール正常動作（M1 unwrapped=75,526,282、M2 hits=6,495,937、M3 containerHits=637,577、M4 purges=2 / clearedEntries=746、M6 totalHits=29,190,867、M9a culled=68,571,506）。
+   - M7: `cacheSize=32768/32768`（上限に張り付き）。Spark 上の `ArrayVoxelShape` / `BitSetDiscreteVoxelShape` は小さく（#52 / #49）、Phase 3 の `ShapeKey` / `CHM$Node` 約60MB占有は解消方向。上限引き上げは Phase 5 候補（下記3）。
+   - ZGC: Major Cycles 平均間隔 1分45秒、Major Pauses 平均 0.008ms。GC の苦しさなし。
+   - **訂正:** JEI 1.21.1 では `#` は TAGS、`$` が TOOLTIPS。遅延構築の確認は「初回 `#` 検索」ではなく「初回 `$` 検索」が正しい（下記2で未確認のまま残る）。
+2. **修正版ビルドの実機確認（残タスク）**
+   - Phase 4 コードの外部レビュー完了（blocker 0 / major 7 / minor 23）。指摘修正はブランチ `fix/phase4-review`（commit `8c892e8`）に実装済みで、GCE ビルド成功（`atmmemopt-0.1.0.jar` 112,106 bytes）。ただし依存 jar は Modrinth の 1.21.1 向け最新＋JEIStuff スタブでコンパイルしたもので、ATM10 v8.6 同梱版との実行時確認はまだ。
    - **確認項目:**
-     - JEI フィルタ構築が `15.9秒 → 約1.0秒` に短縮されているか（ログの `JEI parallel filter build finished` を確認）。
-     - JEI で `#` プレフィックス検索を初めて行った際、オンデマンドで `TOOLTIPS` が構築され検索できるか。
-     - `/atmmemopt status` で `M7 cacheSize` が 32,768 以下に収まり、Spark 上の `ShapeKey` / `CHM$Node` 占有（約 60MB）が大幅に減っているか。
-     - `M9`: 48ブロック以遠の通常 BER がカリングされているか、拠点の大型マルチブロック（Mekanism / Reactors / Create 等）が不自然に消えないか（消える場合は `berCullingWhitelist` にクラス名部分文字列を追加）。
-     - `M9`: ウィンドウ非アクティブ時に FPS が 15 に低下し、フォーカス復帰で元に戻るか。
-     - Phase 4 起動後の `latest.log` に `AtmMemOpt` 起因のエラーがないか。
-2. **（任意）追加最適化候補**
-   - 実機テスト後の Spark ヒープダンプおよび CPU プロファイルを見て、新たな上位占有オブジェクトや Render / Tick ボトルネックがあれば Phase 5 として対応。
-   - リロード計測が不要になったら `enableReloadProfiler = false` に設定して運用可能。
+     - 起動し、`latest.log` に `AtmMemOpt` 起因の mixin エラー／警告がないか（特に plugin の fail-closed 化後に26件が適用されているか）。
+     - JEI で初回 `$` 検索が固まらず結果が出て、`lazyTips` カウンタが増えるか。2回目の `$` 検索も正常か。
+     - `M9a`: Beacon 等の長距離 BER と拠点の大型マルチブロック（Mekanism / Reactors / Create 等）が48ブロック以遠でも不自然に消えないか（消える場合はクラス名を `berCullingWhitelist` に追加）。
+     - `/atmmemopt status` が正常表示されるか。ウィンドウ非アクティブ時に FPS が 15 に低下し、フォーカス復帰で戻るか。
+   - 全項目クリーンなら `fix/phase4-review` を `main` へマージし、`enableReloadProfiler = false` にして運用状態へ移行する。
+3. **Phase 5 候補（判断待ち）**
+   - M7 キャッシュ上限の見直し（32,768 張り付き対策。`voxelShapeMaxCacheEntries` は Config で 262,144 まで変更可能なため、既定値引き上げと追い出し頻度の計測が先）。
+   - Spark 上位占有（`byte[]` 909MB / `Object[]` 717.7MB / `BlockState` 284.4MB / `String` 262.8MB / `ItemStack` 226.2MB）への対応可否。
+   - リロード計測が不要になったら `enableReloadProfiler = false` に設定して運用可能（上記2の完了条件に含む）。
 3. **関連ドキュメント**
    - Phase 1 バイトコード調査: `docs/investigation.md`
    - Phase 4 ロード時間解析: `docs/load_profile.md`

@@ -3,7 +3,7 @@
 Personal memory & performance optimization mod for **All the Mods 10 (ATM10)**.
 
 - **Minecraft:** 1.21.1 / **NeoForge:** 21.1.266 / **Java:** 21
-- **Status:** Phase 4 — `atmmemopt-0.1.0.jar` built; in-game verification of the Phase 4 modules (M8a/M9) in progress
+- **Status:** Phase 4 in-game test done (2026-11-27); post-review fixes are on the `fix/phase4-review` branch, pending an in-game check of the fixed build and merge to `main`
 - **License:** MIT
 
 > ⚠️ Built and tuned for one specific ATM10 (v8.6, 400+ mods) setup. It patches internals of other mods via mixins, so it may break on different mod sets or versions. Use at your own risk. Every module can be switched off individually (see Configuration).
@@ -21,13 +21,15 @@ AtmMemOpt reduces heap pressure and GC churn in a large modpack by interning / s
 | M5 | Vanilla (`NativeImage`) | Diagnostics only (default OFF): tracks unclosed `NativeImage` allocations |
 | M6 | Vanilla (`ItemEnchantments`) | Interns enchantment maps (reference-identity `Holder` keys + single-enchant fast path); unifies empty instances |
 | M7 | Vanilla (`VoxelShape`) | Deduplicates `DoubleArrayList` / `ArrayVoxelShape`; shape cache capped at 32,768 entries with `ReferenceQueue` eviction |
-| M8a | JEI | Parallel search-filter index build; `TOOLTIPS` index deferred to the first `#` search (was ~15.9 s of startup) |
+| M8a | JEI | Parallel search-filter index build; `TOOLTIPS` index deferred to the first `$` search (was ~15.9 s of startup) |
 | M8b | JEIStuff | Skips the 2,595-entry loot-table scan on world join (~5.9 s saved) |
 | M8c | Vanilla reload | Logs the top 10 slowest resource/data-pack reload listeners |
 | M9a | Vanilla rendering | Distance-culls BlockEntityRenderer beyond 48 blocks (large multiblocks whitelisted) |
 | M9b | Vanilla client | Caps FPS at 15 while the window is unfocused |
 
 Measured results (Phase 3, spark heap summary): the former top heap consumers (`DerivedComponentMap`, `ItemEnchantments`, `SpellContainer`, `ArrayVoxelShape`, `CommonToken`) all dropped out of the top 100; total heap 8.7 GB → 8.4 GB; ZGC major-GC interval 19.9 s → 52.3 s.
+
+Phase 4 in-game results (2026-11-27, ~44 min session, spark heap summary + `/atmmemopt status`): JEI filter build 15.9 s → **815 ms**; heap held at 8,476 MB / 12,000 MB; all modules counting normally (M1 unwrapped 75.5M, M6 hits 29.2M, M9a culled 68.6M block entities); `PatchedDataComponentMap` held at #10 (3.04M instances / 139.1 MB, half the pre-fix level); ZGC major cycles every ~1m45s with no GC distress. A full code review of the Phase 4 modules followed (0 blockers, 7 majors, 23 minors); all majors and related minors are fixed on the `fix/phase4-review` branch (GCE build verified, `atmmemopt-0.1.0.jar` 112,106 bytes), pending an in-game check of the fixed build.
 
 ## Commands (client)
 
