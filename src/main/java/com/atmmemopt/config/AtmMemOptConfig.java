@@ -59,6 +59,13 @@ public final class AtmMemOptConfig {
     public static final ModConfigSpec.BooleanValue ENABLE_BAKED_QUAD_VERTEX_DEDUP;
     public static final ModConfigSpec.IntValue BAKED_QUAD_MAX_CACHE_ENTRIES;
     public static final ModConfigSpec.BooleanValue ENABLE_TAG_ENTRY_OPT;
+    public static final ModConfigSpec.BooleanValue ENABLE_MOB_AI_THROTTLING;
+    public static final ModConfigSpec.IntValue MOB_AI_THROTTLE_DISTANCE;
+    public static final ModConfigSpec.IntValue MOB_AI_THROTTLE_FAR_DISTANCE;
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> MOB_AI_THROTTLE_WHITELIST;
+    public static final ModConfigSpec.BooleanValue ENABLE_ENTITY_MERGE_OPT;
+    public static final ModConfigSpec.DoubleValue ITEM_MERGE_RADIUS;
+    public static final ModConfigSpec.DoubleValue XP_MERGE_RADIUS;
 
     private static volatile Map<String, String> earlyValues;
 
@@ -244,6 +251,46 @@ public final class AtmMemOptConfig {
         ENABLE_TAG_ENTRY_OPT = builder
                 .comment("Module 16: Intern immutable TagEntry instances across datapack tags.")
                 .define("enableTagEntryOpt", true);
+
+        ENABLE_MOB_AI_THROTTLING = builder
+                .comment("Module 20: Throttle Mob#serverAiStep() for distant non-critical mobs to reduce server/integrated TPS load.")
+                .define("enableMobAiThrottling", true);
+
+        MOB_AI_THROTTLE_DISTANCE = builder
+                .comment("Module 20: Distance (in blocks) beyond which non-whitelisted mob AI runs every 2 ticks.")
+                .defineInRange("mobAiThrottleDistance", 48, 16, 256);
+
+        MOB_AI_THROTTLE_FAR_DISTANCE = builder
+                .comment("Module 20: Distance (in blocks) beyond which non-whitelisted mob AI runs every 4 ticks.")
+                .defineInRange("mobAiThrottleFarDistance", 64, 24, 256);
+
+        MOB_AI_THROTTLE_WHITELIST = builder
+                .comment("Module 20: Class name substrings excluded from distant mob AI throttling (bosses, villagers, companions, etc.).")
+                .defineListAllowEmpty(
+                        "mobAiThrottleWhitelist",
+                        List.of(
+                                "Boss",
+                                "Dragon",
+                                "Wither",
+                                "cataclysm",
+                                "irons_spellbooks",
+                                "twilightforest.entity.boss",
+                                "minecolonies"
+                        ),
+                        o -> o instanceof String
+                );
+
+        ENABLE_ENTITY_MERGE_OPT = builder
+                .comment("Module 21: Expand ItemEntity and ExperienceOrb merge search radii to merge dense drops faster.")
+                .define("enableEntityMergeOpt", true);
+
+        ITEM_MERGE_RADIUS = builder
+                .comment("Module 21: Horizontal merge search radius (in blocks) for dropped ItemEntity (vanilla default is 0.5).")
+                .defineInRange("itemMergeRadius", 1.5D, 0.5D, 6.0D);
+
+        XP_MERGE_RADIUS = builder
+                .comment("Module 21: Merge search radius (in blocks) for ExperienceOrb (vanilla default is 0.5).")
+                .defineInRange("xpMergeRadius", 1.5D, 0.5D, 6.0D);
 
         builder.pop();
         SPEC = builder.build();

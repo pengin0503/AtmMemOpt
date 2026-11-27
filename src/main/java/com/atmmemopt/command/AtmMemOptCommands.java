@@ -22,6 +22,8 @@ import com.atmmemopt.opt.startup.JeiFilterOptHelper;
 import com.atmmemopt.opt.startup.ReloadProfiler;
 import com.atmmemopt.opt.tags.TagEntryOptHelper;
 import com.atmmemopt.opt.texture.SpriteMipmapReleaseHelper;
+import com.atmmemopt.opt.tick.EntityMergeOptHelper;
+import com.atmmemopt.opt.tick.MobAiThrottleHelper;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -244,10 +246,12 @@ public final class AtmMemOptCommands {
 
         boolean m13Opt = AtmMemOptConfig.ENABLE_CLIMATE_PARAMETER_OPT.get();
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M13 (Climate.Parameter): %s | internHits=%d, cacheSize=%d",
+                "M13/18 (Climate.Parameter): %s | paramHits=%d, arrayHits=%d, cache=%d/%d",
                 m13Opt ? "ON" : "OFF",
                 ClimateParameterOptHelper.getInternHits(),
-                ClimateParameterOptHelper.getCacheSize()
+                ClimateParameterOptHelper.getArrayHits(),
+                ClimateParameterOptHelper.getCacheSize(),
+                ClimateParameterOptHelper.getArrayCacheSize()
         )).withStyle(ChatFormatting.GREEN));
 
         boolean m14Opt = AtmMemOptConfig.ENABLE_SPRITE_MIPMAP_RELEASE.get();
@@ -261,12 +265,14 @@ public final class AtmMemOptCommands {
 
         boolean m15Opt = AtmMemOptConfig.ENABLE_BAKED_QUAD_VERTEX_DEDUP.get();
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M15 (BakedQuad int[]): %s | hits=%d, estSaved=%s, cacheSize=%d/%d",
+                "M15/17 (BakedQuad): %s | vertHits=%d, quadHits=%d, estSaved=%s, cache=%d/%d (quad=%d)",
                 m15Opt ? "ON" : "OFF",
                 BakedQuadOptHelper.getVertexHits(),
+                BakedQuadOptHelper.getQuadHits(),
                 fmtMB(BakedQuadOptHelper.getEstimatedBytesSaved()),
                 BakedQuadOptHelper.getCacheSize(),
-                BakedQuadOptHelper.getCachedMaxEntries()
+                BakedQuadOptHelper.getCachedMaxEntries(),
+                BakedQuadOptHelper.getQuadCacheSize()
         )).withStyle(ChatFormatting.GREEN));
 
         boolean m16Opt = AtmMemOptConfig.ENABLE_TAG_ENTRY_OPT.get();
@@ -275,6 +281,21 @@ public final class AtmMemOptCommands {
                 m16Opt ? "ON" : "OFF",
                 TagEntryOptHelper.getInternHits(),
                 TagEntryOptHelper.getCacheSize()
+        )).withStyle(ChatFormatting.GREEN));
+
+        boolean m20Opt = AtmMemOptConfig.ENABLE_MOB_AI_THROTTLING.get();
+        boolean m21Opt = AtmMemOptConfig.ENABLE_ENTITY_MERGE_OPT.get();
+        sendAndLog(source, logBuf, Component.literal(String.format(
+                "M20/21 (TPS Opt): mobAi=%s (dist=%d/%d, skipped=%d), merge=%s (item=%.1f/xp=%.1f, scans=%d/%d)",
+                m20Opt ? "ON" : "OFF",
+                MobAiThrottleHelper.getCachedNearDist(),
+                MobAiThrottleHelper.getCachedFarDist(),
+                MobAiThrottleHelper.getThrottledTicks(),
+                m21Opt ? "ON" : "OFF",
+                EntityMergeOptHelper.getCachedItemRadius(),
+                EntityMergeOptHelper.getCachedXpRadius(),
+                EntityMergeOptHelper.getItemScansExpanded(),
+                EntityMergeOptHelper.getXpScansExpanded()
         )).withStyle(ChatFormatting.GREEN));
 
         AtmMemOpt.LOGGER.info("\n{}", logBuf);

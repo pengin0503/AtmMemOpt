@@ -135,6 +135,16 @@ public class AtmMemOptMixinPlugin implements IMixinConfigPlugin {
             return AtmMemOptConfig.getEarlyBoolean("enableTagEntryOpt", true);
         }
 
+        // Module 20: Distant mob AI throttling
+        if (relative.equals("tick.MobAiThrottleMixin")) {
+            return AtmMemOptConfig.getEarlyBoolean("enableMobAiThrottling", true);
+        }
+
+        // Module 21: ItemEntity / ExperienceOrb merge radius optimization
+        if (relative.equals("tick.ItemEntityMergeMixin") || relative.equals("tick.ExperienceOrbMergeMixin")) {
+            return AtmMemOptConfig.getEarlyBoolean("enableEntityMergeOpt", true);
+        }
+
         return true;
     }
 

@@ -3,7 +3,7 @@
 Personal memory & performance optimization mod for **All the Mods 10 (ATM10)**.
 
 - **Minecraft:** 1.21.1 / **NeoForge:** 21.1.266 / **Java:** 21
-- **Status:** Phase 7 — M14〜M16 (`SpriteContents` mipmap release, `BakedQuad` vertex dedup, `TagEntry` interning) + `/atmmemopt diag all` implemented; ready for build & in-game verification
+- **Status:** Phase 8/9 — M17/M18 (`BakedQuad` body & `Climate.Parameter[]` interning), M20/M21 (TPS: distant mob AI throttling & item/XP merge optimization), and JUnit 5 unit tests implemented; ready for build & in-game verification
 - **License:** MIT
 
 > ⚠️ Built and tuned for one specific ATM10 (v8.6, 400+ mods) setup. It patches internals of other mods via mixins, so it may break on different mod sets or versions. Use at your own risk. Every module can be switched off individually (see Configuration).
@@ -31,16 +31,18 @@ AtmMemOpt reduces heap pressure and GC churn in a large modpack by interning / s
 | M10 | Vanilla (`DataComponentPatch`) | Interns immutable `DataComponentPatch` instances (single-entry fast path + bounded weak cache) and shares backing `Reference2ObjectMap` copy-on-write on `asPatch()` |
 | M11 | Vanilla (`PalettedContainer`) | Replaces per-container `ThreadingDetector` (`Semaphore` + `ReentrantLock`) with a shared no-op detector |
 | M12 | Vanilla (`ResourceLocation`) | Interns `namespace` strings (zero-alloc `"minecraft"` fast path) and deduplicates `ResourceLocation` instances in a bounded weak cache |
-| M13 | Vanilla (`Climate.Parameter`) | Interns immutable `Biome` `Climate.Parameter(min, max)` instances |
+| M13/18 | Vanilla (`Climate.Parameter` / `RTree`) | Interns immutable `Biome` `Climate.Parameter(min, max)` instances and `Climate.Parameter[]` parameter-space arrays |
 | M14 | Vanilla (`SpriteContents`) | Closes and drops static sprite mipmap `NativeImage` levels (1..N) after GPU atlas upload (keeps `originalImage` level 0 intact) |
-| M15 | Vanilla (`BakedQuad`) | Deduplicates identical `BakedQuad` vertex `int[]` arrays in a bounded weak cache |
+| M15/17 | Vanilla (`BakedQuad` / `FaceBakery`) | Deduplicates identical `BakedQuad` vertex `int[]` arrays and interns `BakedQuad` instances in bounded weak caches |
 | M16 | Vanilla (`TagEntry`) | Interns immutable `TagEntry` instances across datapack tags |
+| M20 | Vanilla (`Mob`) | Throttles `serverAiStep()` for distant non-critical mobs (1/2 beyond 48 blocks, 1/4 beyond 64 blocks; bosses, villagers, pets, named/persistent, active-target mobs excluded) |
+| M21 | Vanilla (`ItemEntity` / `ExperienceOrb`) | Expands drop/XP merge search radius (default 1.5 blocks) to merge dense drops faster |
 
 Measured results (Phase 4, spark heap summary): the former top heap consumers (`DerivedComponentMap`, `ItemEnchantments`, `SpellContainer`, `CommonToken`) all dropped out of the top 100; JEI filter build 15.9 s → 0.8 s; ZGC major-GC interval 19.9 s → 105 s.
 
 ## Commands (client)
 
-- `/atmmemopt status` — heap / metaspace / direct-buffer usage plus per-module state and savings counters (M1〜M16)
+- `/atmmemopt status` — heap / metaspace / direct-buffer usage plus per-module state and savings counters (M1〜M21)
 - `/atmmemopt purge-shader-cache` — immediately releases the Iris `glsl_transformer` caches
 - `/atmmemopt purge-caches` — purges all weak/shader caches across M3, M4, M6, M7, M10, M12, M13, M15, and M16
 - `/atmmemopt diag all` — runs `status` + `sprites` + `ber` + `entity` (+ `nativeimage` if M5 is enabled) in a single command

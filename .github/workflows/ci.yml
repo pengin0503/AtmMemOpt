@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verify-vanilla-and-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Validate mixin config JSON
+        run: jq . src/main/resources/atmmemopt.mixins.json > /dev/null
+
+      - name: Cache Gradle & NeoForge artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Compile vanilla/NeoForge modules and run JUnit 5 tests
+        run: |
+          cat << 'EOF' > /tmp/ci_vanilla.gradle
+          allprojects {
+              afterEvaluate {
+                  tasks.named('compileJava', JavaCompile) {
+                      exclude '**/owo/**'
+                      exclude '**/irons/**'
+                      exclude '**/iris/**'
+                      exclude '**/startup/**'
+                      exclude '**/command/AtmMemOptCommands.java'
+                      exclude '**/AtmMemOpt.java'
+                  }
+              }
+          }
+          EOF
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --init-script /tmp/ci_vanilla.gradle test

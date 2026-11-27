@@ -11,6 +11,8 @@ import com.atmmemopt.opt.render.EntityCullingHelper;
 import com.atmmemopt.opt.render.ParticleCullingHelper;
 import com.atmmemopt.opt.resloc.ResourceLocationOptHelper;
 import com.atmmemopt.opt.tags.TagEntryOptHelper;
+import com.atmmemopt.opt.tick.EntityMergeOptHelper;
+import com.atmmemopt.opt.tick.MobAiThrottleHelper;
 import com.mojang.logging.LogUtils;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
@@ -62,6 +64,8 @@ public class AtmMemOpt {
         }
         DataComponentPatchOptHelper.refreshConfig();
         ResourceLocationOptHelper.refreshConfig();
+        MobAiThrottleHelper.refreshConfig();
+        EntityMergeOptHelper.refreshConfig();
         if (FMLEnvironment.dist == Dist.CLIENT) {
             BerCullingHelper.refreshConfig();
             ParticleCullingHelper.refreshConfig();

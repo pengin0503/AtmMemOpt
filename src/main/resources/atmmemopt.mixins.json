@@ -9,7 +9,8 @@
     "render.ParticleEngineMixin",
     "render.EntityRenderDispatcherMixin",
     "texture.SpriteContentsMixin",
-    "model.BakedQuadMixin"
+    "model.BakedQuadMixin",
+    "model.FaceBakeryMixin"
   ],
   "compatibilityLevel": "JAVA_21",
   "injectors": {
@@ -45,8 +46,12 @@
     "chunk.ThreadingDetectorMixin",
     "resloc.ResourceLocationMixin",
     "climate.ClimateParameterMixin",
+    "climate.ClimateRTreeNodeMixin",
     "tags.TagEntryAccessor",
-    "tags.TagEntryMixin"
+    "tags.TagEntryMixin",
+    "tick.MobAiThrottleMixin",
+    "tick.ItemEntityMergeMixin",
+    "tick.ExperienceOrbMergeMixin"
   ],
   "package": "com.atmmemopt.mixin",
   "plugin": "com.atmmemopt.mixin.AtmMemOptMixinPlugin",
