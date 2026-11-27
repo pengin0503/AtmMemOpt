@@ -41,6 +41,12 @@ public final class AtmMemOptConfig {
     public static final ModConfigSpec.ConfigValue<List<? extends String>> BER_CULLING_WHITELIST;
     public static final ModConfigSpec.BooleanValue ENABLE_UNFOCUSED_FPS_LIMIT;
     public static final ModConfigSpec.IntValue UNFOCUSED_FPS_LIMIT;
+    public static final ModConfigSpec.BooleanValue ENABLE_DATA_COMPONENT_PATCH_OPT;
+    public static final ModConfigSpec.IntValue DATA_COMPONENT_PATCH_MAX_CACHE_ENTRIES;
+    public static final ModConfigSpec.BooleanValue ENABLE_PALETTED_CONTAINER_OPT;
+    public static final ModConfigSpec.BooleanValue ENABLE_RESOURCE_LOCATION_OPT;
+    public static final ModConfigSpec.IntValue RESOURCE_LOCATION_MAX_CACHE_ENTRIES;
+    public static final ModConfigSpec.BooleanValue ENABLE_CLIMATE_PARAMETER_OPT;
 
     private static volatile Map<String, String> earlyValues;
 
@@ -142,6 +148,30 @@ public final class AtmMemOptConfig {
         UNFOCUSED_FPS_LIMIT = builder
                 .comment("Module 9b: Framerate limit when Minecraft window is unfocused.")
                 .defineInRange("unfocusedFpsLimit", 15, 1, 60);
+
+        ENABLE_DATA_COMPONENT_PATCH_OPT = builder
+                .comment("Module 10: Intern immutable DataComponentPatch instances and share their backing Reference2ObjectMap copy-on-write in PatchedDataComponentMap.")
+                .define("enableDataComponentPatchOpt", true);
+
+        DATA_COMPONENT_PATCH_MAX_CACHE_ENTRIES = builder
+                .comment("Module 10: Maximum entries in the DataComponentPatch weak intern cache (0 disables patch interning while keeping CoW map sharing).")
+                .defineInRange("dataComponentPatchMaxCacheEntries", 65536, 0, 262144);
+
+        ENABLE_PALETTED_CONTAINER_OPT = builder
+                .comment("Module 11: Replace per-PalettedContainer ThreadingDetector (Semaphore + ReentrantLock) with a shared no-op detector to save ~25-30MB and lock overhead.")
+                .define("enablePalettedContainerOpt", true);
+
+        ENABLE_RESOURCE_LOCATION_OPT = builder
+                .comment("Module 12: Intern ResourceLocation namespaces and deduplicate identical ResourceLocation instances within a bounded weak cache.")
+                .define("enableResourceLocationOpt", true);
+
+        RESOURCE_LOCATION_MAX_CACHE_ENTRIES = builder
+                .comment("Module 12: Maximum entries in the ResourceLocation weak intern cache (0 disables instance caching while keeping namespace string interning).")
+                .defineInRange("resourceLocationMaxCacheEntries", 131072, 0, 524288);
+
+        ENABLE_CLIMATE_PARAMETER_OPT = builder
+                .comment("Module 13: Intern immutable Biome Climate.Parameter instances.")
+                .define("enableClimateParameterOpt", true);
 
         builder.pop();
         SPEC = builder.build();

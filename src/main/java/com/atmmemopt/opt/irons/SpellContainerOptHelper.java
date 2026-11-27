@@ -208,6 +208,15 @@ public final class SpellContainerOptHelper {
         }
     }
 
+    public static int clearWeakCache() {
+        int removed = CONTAINER_CACHE.size();
+        CONTAINER_CACHE.clear();
+        while (CONTAINER_QUEUE.poll() != null) {
+            // drain
+        }
+        return removed;
+    }
+
     public static long getSpellDataHits() {
         return SPELL_DATA_HITS.sum();
     }

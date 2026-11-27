@@ -43,5 +43,11 @@ public class ArrayVoxelShapeMixin {
         this.xs = VoxelShapeOptHelper.internDoubleList(this.xs);
         this.ys = VoxelShapeOptHelper.internDoubleList(this.ys);
         this.zs = VoxelShapeOptHelper.internDoubleList(this.zs);
+        VoxelShapeAccessor shapeAcc = (VoxelShapeAccessor) this;
+        DiscreteVoxelShape cur = shapeAcc.atmmemopt$getShape();
+        DiscreteVoxelShape interned = VoxelShapeOptHelper.internDiscreteShape(cur);
+        if (interned != cur) {
+            shapeAcc.atmmemopt$setShape(interned);
+        }
     }
 }

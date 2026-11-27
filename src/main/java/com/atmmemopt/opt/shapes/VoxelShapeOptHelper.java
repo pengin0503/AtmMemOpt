@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.LongAdder;
  */
 public final class VoxelShapeOptHelper {
     private static final int MAX_DOUBLE_LIST_CACHE = 16384;
+    private static final int MAX_DISCRETE_CACHE = 16384;
 
     private static final DoubleArrayList UNIT_0_1 = DoubleArrayList.wrap(new double[]{0.0D, 1.0D});
     private static final DoubleArrayList HALF_0_05 = DoubleArrayList.wrap(new double[]{0.0D, 0.5D});
@@ -42,10 +43,13 @@ public final class VoxelShapeOptHelper {
     private static final long BITS_1 = Double.doubleToLongBits(1.0D);
 
     private static final ConcurrentHashMap<Object, DoubleArrayList> DOUBLE_LIST_CACHE = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<DiscreteKey, KeyedDiscreteRef> DISCRETE_CACHE = new ConcurrentHashMap<>();
+    private static final ReferenceQueue<BitSetDiscreteVoxelShape> DISCRETE_QUEUE = new ReferenceQueue<>();
     private static final ConcurrentHashMap<ShapeKey, KeyedShapeRef> SHAPE_CACHE = new ConcurrentHashMap<>();
     private static final ReferenceQueue<ArrayVoxelShape> SHAPE_QUEUE = new ReferenceQueue<>();
 
     private static final LongAdder DOUBLE_LIST_HITS = new LongAdder();
+    private static final LongAdder DISCRETE_HITS = new LongAdder();
     private static final LongAdder SHAPE_HITS = new LongAdder();
 
     private VoxelShapeOptHelper() {
@@ -205,6 +209,81 @@ public final class VoxelShapeOptHelper {
         }
     }
 
+    public static DiscreteVoxelShape internDiscreteShape(DiscreteVoxelShape dvs) {
+        if (!(dvs instanceof BitSetDiscreteVoxelShape bsd)) {
+            return dvs;
+        }
+        drainDiscreteQueue();
+
+        BitSetDiscreteVoxelShapeAccessor bsdAcc = (BitSetDiscreteVoxelShapeAccessor) (Object) bsd;
+        BitSet storage = bsdAcc.atmmemopt$getStorage();
+        long[] words = storage != null ? storage.toLongArray() : new long[0];
+
+        DiscreteKey key = new DiscreteKey(
+                dvs.getXSize(), dvs.getYSize(), dvs.getZSize(),
+                bsdAcc.atmmemopt$getXMin(), bsdAcc.atmmemopt$getYMin(), bsdAcc.atmmemopt$getZMin(),
+                bsdAcc.atmmemopt$getXMax(), bsdAcc.atmmemopt$getYMax(), bsdAcc.atmmemopt$getZMax(),
+                words
+        );
+
+        KeyedDiscreteRef fastRef = DISCRETE_CACHE.get(key);
+        if (fastRef != null) {
+            BitSetDiscreteVoxelShape cached = fastRef.get();
+            if (cached != null) {
+                if (cached != bsd) {
+                    DISCRETE_HITS.increment();
+                }
+                return cached;
+            }
+        }
+
+        if (DISCRETE_CACHE.size() >= MAX_DISCRETE_CACHE) {
+            return bsd;
+        }
+
+        final BitSetDiscreteVoxelShape[] resultHolder = new BitSetDiscreteVoxelShape[1];
+        DISCRETE_CACHE.compute(key, (k, existingRef) -> {
+            if (existingRef != null) {
+                BitSetDiscreteVoxelShape cached = existingRef.get();
+                if (cached != null) {
+                    if (cached != bsd) {
+                        DISCRETE_HITS.increment();
+                    }
+                    resultHolder[0] = cached;
+                    return existingRef;
+                }
+            }
+            if (DISCRETE_CACHE.size() >= MAX_DISCRETE_CACHE) {
+                resultHolder[0] = bsd;
+                return null;
+            }
+            resultHolder[0] = bsd;
+            return new KeyedDiscreteRef(k, bsd, DISCRETE_QUEUE);
+        });
+        return resultHolder[0];
+    }
+
+    public static int clearWeakCaches() {
+        int removed = SHAPE_CACHE.size() + DISCRETE_CACHE.size();
+        SHAPE_CACHE.clear();
+        DISCRETE_CACHE.clear();
+        while (SHAPE_QUEUE.poll() != null) {
+            // drain
+        }
+        while (DISCRETE_QUEUE.poll() != null) {
+            // drain
+        }
+        return removed;
+    }
+
+    private static void drainDiscreteQueue() {
+        Reference<? extends BitSetDiscreteVoxelShape> ref;
+        while ((ref = DISCRETE_QUEUE.poll()) != null) {
+            KeyedDiscreteRef keyed = (KeyedDiscreteRef) ref;
+            DISCRETE_CACHE.remove(keyed.key, keyed);
+        }
+    }
+
     private static void drainShapeQueue() {
         Reference<? extends ArrayVoxelShape> ref;
         while ((ref = SHAPE_QUEUE.poll()) != null) {
@@ -217,12 +296,83 @@ public final class VoxelShapeOptHelper {
         return DOUBLE_LIST_HITS.sum();
     }
 
+    public static long getDiscreteHits() {
+        return DISCRETE_HITS.sum();
+    }
+
     public static long getShapeHits() {
         return SHAPE_HITS.sum();
     }
 
     public static int getShapeCacheSize() {
         return SHAPE_CACHE.size();
+    }
+
+    private static final class KeyedDiscreteRef extends WeakReference<BitSetDiscreteVoxelShape> {
+        final DiscreteKey key;
+
+        KeyedDiscreteRef(DiscreteKey key, BitSetDiscreteVoxelShape referent, ReferenceQueue<BitSetDiscreteVoxelShape> queue) {
+            super(referent, queue);
+            this.key = key;
+        }
+    }
+
+    private static final class DiscreteKey {
+        final int xSize, ySize, zSize;
+        final int xMin, yMin, zMin, xMax, yMax, zMax;
+        final long[] words;
+        final int hash;
+
+        DiscreteKey(
+                int xSize, int ySize, int zSize,
+                int xMin, int yMin, int zMin, int xMax, int yMax, int zMax,
+                long[] words
+        ) {
+            this.xSize = xSize;
+            this.ySize = ySize;
+            this.zSize = zSize;
+            this.xMin = xMin;
+            this.yMin = yMin;
+            this.zMin = zMin;
+            this.xMax = xMax;
+            this.yMax = yMax;
+            this.zMax = zMax;
+            this.words = words;
+
+            int h = xSize;
+            h = 31 * h + ySize;
+            h = 31 * h + zSize;
+            h = 31 * h + xMin;
+            h = 31 * h + yMin;
+            h = 31 * h + zMin;
+            h = 31 * h + xMax;
+            h = 31 * h + yMax;
+            h = 31 * h + zMax;
+            h = 31 * h + Arrays.hashCode(words);
+            this.hash = h;
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof DiscreteKey other)) return false;
+            return this.hash == other.hash
+                    && this.xSize == other.xSize
+                    && this.ySize == other.ySize
+                    && this.zSize == other.zSize
+                    && this.xMin == other.xMin
+                    && this.yMin == other.yMin
+                    && this.zMin == other.zMin
+                    && this.xMax == other.xMax
+                    && this.yMax == other.yMax
+                    && this.zMax == other.zMax
+                    && Arrays.equals(this.words, other.words);
+        }
     }
 
     private static final class KeyedShapeRef extends WeakReference<ArrayVoxelShape> {

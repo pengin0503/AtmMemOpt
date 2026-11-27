@@ -106,11 +106,13 @@ public final class ItemEnchantmentsOptHelper {
         return resultHolder[0];
     }
 
-    public static void clearCache() {
+    public static int clearCache() {
+        int removed = CACHE.size();
         CACHE.clear();
         while (QUEUE.poll() != null) {
             // drain
         }
+        return removed;
     }
 
     private static void drainQueue() {

@@ -94,6 +94,26 @@ public class AtmMemOptMixinPlugin implements IMixinConfigPlugin {
             return AtmMemOptConfig.getEarlyBoolean("enableUnfocusedFpsLimit", true);
         }
 
+        // Module 10: DataComponentPatch interning & CoW map sharing
+        if (relative.startsWith("patch.")) {
+            return AtmMemOptConfig.getEarlyBoolean("enableDataComponentPatchOpt", true);
+        }
+
+        // Module 11: PalettedContainer ThreadingDetector optimization
+        if (relative.startsWith("chunk.")) {
+            return AtmMemOptConfig.getEarlyBoolean("enablePalettedContainerOpt", true);
+        }
+
+        // Module 12: ResourceLocation interning
+        if (relative.startsWith("resloc.")) {
+            return AtmMemOptConfig.getEarlyBoolean("enableResourceLocationOpt", true);
+        }
+
+        // Module 13: Biome Climate.Parameter interning
+        if (relative.startsWith("climate.")) {
+            return AtmMemOptConfig.getEarlyBoolean("enableClimateParameterOpt", true);
+        }
+
         return true;
     }
 

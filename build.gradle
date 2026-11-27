@@ -42,8 +42,9 @@ repositories {
 
 dependencies {
     // Compile-only references against the actual ATM10 mod JARs (read-only)
-    def modsDir = file(project.findProperty('atm10_mods_dir') ?: '')
-    if (modsDir.exists()) {
+    def modsDirProp = project.findProperty('atm10_mods_dir')
+    def modsDir = modsDirProp ? new File(modsDirProp.toString()) : null
+    if (modsDir != null && modsDir.exists()) {
         compileOnly fileTree(dir: modsDir, includes: [
             'owo-lib-neoforge-*.jar',
             'irons_spellbooks-*.jar',

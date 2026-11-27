@@ -32,7 +32,15 @@
     "shapes.ShapesMixin",
     "shapes.VoxelShapeAccessor",
     "startup.JeiStuffLootRecipesMixin",
-    "startup.SimpleReloadInstanceMixin"
+    "startup.SimpleReloadInstanceMixin",
+    "patch.DataComponentPatchAccessor",
+    "patch.DataComponentPatchMixin",
+    "patch.DataComponentPatchBuilderMixin",
+    "patch.PatchedDataComponentMapPatchShareMixin",
+    "chunk.PalettedContainerMixin",
+    "chunk.ThreadingDetectorMixin",
+    "resloc.ResourceLocationMixin",
+    "climate.ClimateParameterMixin"
   ],
   "package": "com.atmmemopt.mixin",
   "plugin": "com.atmmemopt.mixin.AtmMemOptMixinPlugin",
