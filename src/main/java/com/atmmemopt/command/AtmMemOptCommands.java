@@ -143,12 +143,16 @@ public final class AtmMemOptCommands {
 
         boolean m7Opt = AtmMemOptConfig.ENABLE_VOXEL_SHAPE_OPT.get();
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M7 (VoxelShape): %s | doubleListHits=%d, shapeHits=%d, cacheSize=%d/%d",
+                "M7 (VoxelShape): %s | doubleListHits=%d, shapeHits=%d, cacheSize=%d/%d, capRejections=%d, staleRefs=%d, drained=%d, doubleListCapRejections=%d",
                 m7Opt ? "ON" : "OFF",
                 VoxelShapeOptHelper.getDoubleListHits(),
                 VoxelShapeOptHelper.getShapeHits(),
                 VoxelShapeOptHelper.getShapeCacheSize(),
-                AtmMemOptConfig.VOXEL_SHAPE_MAX_CACHE_ENTRIES.get()
+                AtmMemOptConfig.VOXEL_SHAPE_MAX_CACHE_ENTRIES.get(),
+                VoxelShapeOptHelper.getShapeCapRejections(),
+                VoxelShapeOptHelper.getShapeStaleRefs(),
+                VoxelShapeOptHelper.getShapeDrained(),
+                VoxelShapeOptHelper.getDoubleListCapRejections()
         )).withStyle(ChatFormatting.GREEN));
 
         boolean m8Jei = ModList.get().isLoaded("jei") && AtmMemOptConfig.ENABLE_JEI_PARALLEL_FILTER.get();
