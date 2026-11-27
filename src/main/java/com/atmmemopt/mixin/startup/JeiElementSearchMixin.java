@@ -1,5 +1,6 @@
 package com.atmmemopt.mixin.startup;
 
+import com.atmmemopt.AtmMemOpt;
 import com.atmmemopt.opt.startup.JeiFilterOptHelper;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -25,7 +26,7 @@ import java.util.Set;
 
 /**
  * Module 8a: Parallelizes ElementSearch constructor index building and lazily builds
- * the TOOLTIPS index only when the user first performs a '#' tooltip search.
+ * the TOOLTIPS index only when the user first performs a '$' tooltip search.
  */
 @Mixin(value = ElementSearch.class, remap = false)
 public abstract class JeiElementSearchMixin {
@@ -53,11 +54,16 @@ public abstract class JeiElementSearchMixin {
     @Unique
     private boolean atmmemopt$parallelBuilt;
 
+    /** Set when the invoker mixin is unavailable; every rebuild must then keep vanilla behaviour. */
     @Unique
-    private List<IListElementInfo<?>> atmmemopt$deferredTooltipElements;
+    private boolean atmmemopt$vanillaRebuild;
+
+    /* Volatile + guarded by synchronized(this) so concurrent first searches cannot double-build. */
+    @Unique
+    private volatile List<IListElementInfo<?>> atmmemopt$deferredTooltipElements;
 
     @Unique
-    private PrefixInfo<IListElementInfo<?>, IListElement<?>> atmmemopt$tooltipPrefix;
+    private volatile PrefixInfo<IListElementInfo<?>, IListElement<?>> atmmemopt$tooltipPrefix;
 
     @WrapOperation(
             method = "<init>(Lmezz/jei/gui/search/ElementPrefixParser;Ljava/util/Collection;Lmezz/jei/api/runtime/IIngredientManager;)V",
@@ -72,17 +78,36 @@ public abstract class JeiElementSearchMixin {
             Collection<IListElementInfo<?>> elements,
             Operation<Void> original
     ) {
+        if (this.atmmemopt$vanillaRebuild) {
+            original.call(instance, index, elements);
+            return;
+        }
         if (!this.atmmemopt$parallelBuilt) {
             this.atmmemopt$parallelBuilt = true;
-            this.atmmemopt$deferredTooltipElements = JeiFilterOptHelper.buildAllIndexesParallel(
-                    this.elementPrefixParser,
-                    elements,
-                    this.prefixedSearchables,
-                    JeiElementSearchMixin::createSearchable
-            );
-            if (this.atmmemopt$deferredTooltipElements != null) {
-                this.atmmemopt$tooltipPrefix = ((JeiElementPrefixParserInvoker) this.elementPrefixParser)
-                        .atmmemopt$getPrefixInfo(ElementSearchIndex.TOOLTIPS);
+            // instanceof guard: on JEI version drift the invoker mixin may be absent.
+            // Fall back to vanilla index building for *every* rebuild call (the wrapper
+            // otherwise suppresses all seven constructor-time rebuilds).
+            if (!(this.elementPrefixParser instanceof JeiElementPrefixParserInvoker invoker)) {
+                this.atmmemopt$vanillaRebuild = true;
+                AtmMemOpt.LOGGER.warn("[AtmMemOpt] JEI ElementPrefixParser invoker unavailable; using vanilla search index building.");
+                original.call(instance, index, elements);
+                return;
+            }
+            try {
+                this.atmmemopt$deferredTooltipElements = JeiFilterOptHelper.buildAllIndexesParallel(
+                        invoker,
+                        elements,
+                        this.prefixedSearchables,
+                        JeiElementSearchMixin::createSearchable
+                );
+                if (this.atmmemopt$deferredTooltipElements != null) {
+                    this.atmmemopt$tooltipPrefix = invoker.atmmemopt$getPrefixInfo(ElementSearchIndex.TOOLTIPS);
+                }
+            } catch (Throwable t) {
+                this.atmmemopt$deferredTooltipElements = null;
+                this.atmmemopt$vanillaRebuild = true;
+                AtmMemOpt.LOGGER.error("[AtmMemOpt] Parallel JEI index building failed; using vanilla rebuilding.", t);
+                original.call(instance, index, elements);
             }
         }
     }
@@ -92,14 +117,47 @@ public abstract class JeiElementSearchMixin {
             ElementPrefixParser.TokenInfo tokenInfo,
             CallbackInfoReturnable<Set<IListElement<?>>> cir
     ) {
-        List<IListElementInfo<?>> deferred = this.atmmemopt$deferredTooltipElements;
-        if (deferred != null && tokenInfo != null && tokenInfo.prefixInfo() == this.atmmemopt$tooltipPrefix) {
-            this.atmmemopt$deferredTooltipElements = null;
-            long start = System.nanoTime();
-            PrefixedSearchable<IListElementInfo<?>, IListElement<?>> built = createSearchable(this.atmmemopt$tooltipPrefix, deferred);
-            this.prefixedSearchables.put(this.atmmemopt$tooltipPrefix, built);
-            this.updateCombinedSearchables();
-            JeiFilterOptHelper.recordLazyTooltipBuild((System.nanoTime() - start) / 1_000_000L, deferred.size());
+        if (tokenInfo == null) {
+            return;
         }
+        PrefixInfo<IListElementInfo<?>, IListElement<?>> tooltipPrefix = this.atmmemopt$tooltipPrefix;
+        if (tooltipPrefix == null || tokenInfo.prefixInfo() != tooltipPrefix) {
+            return;
+        }
+        if (this.atmmemopt$deferredTooltipElements == null) {
+            return;
+        }
+        // Atomic test-and-set: only one caller may build, other concurrent searches
+        // simply observe the (still empty) placeholder and return an empty result this time.
+        synchronized (this) {
+            List<IListElementInfo<?>> deferred = this.atmmemopt$deferredTooltipElements;
+            if (deferred == null) {
+                return;
+            }
+            long start = System.nanoTime();
+            try {
+                // Build into a local first: only publish a fully built index, and only
+                // then clear the deferred snapshot so a failure can be retried later.
+                PrefixedSearchable<IListElementInfo<?>, IListElement<?>> built = createSearchable(tooltipPrefix, deferred);
+                this.prefixedSearchables.put(tooltipPrefix, built);
+                this.updateCombinedSearchables();
+                this.atmmemopt$deferredTooltipElements = null;
+                JeiFilterOptHelper.recordLazyTooltipBuild((System.nanoTime() - start) / 1_000_000L, deferred.size());
+            } catch (Throwable t) {
+                // Never propagate into JEI's ingredient-filter path. Keep the deferred
+                // list so the next '$' search retries the build.
+                AtmMemOpt.LOGGER.error("[AtmMemOpt] Failed to lazily build JEI TOOLTIPS index; will retry on next search.", t);
+            }
+        }
+        /*
+         * LIMITATION (A3): the deferred build uses the construction-time snapshot. Entries
+         * added later via ElementSearch.add() are written into the empty placeholder
+         * storage and are lost when it is replaced here. JEI 1.21.1's PrefixedSearchable
+         * only exposes getSearchStorage()/getStrings(); ISearchStorage has no "copy all
+         * string->element entries" API, and IListElement cannot be converted back into
+         * the IListElementInfo that getStrings() requires, so there is no clean storage
+         * merge. Rebuilding from a live info collection would need extra invasive
+         * injectors; deliberately not attempted here.
+         */
     }
 }

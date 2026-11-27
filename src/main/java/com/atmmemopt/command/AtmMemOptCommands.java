@@ -92,8 +92,10 @@ public final class AtmMemOptCommands {
         sendAndLog(source, logBuf, Component.literal(String.format(
                 "M1 (owo DerivedMap): %s | unwrapped=%d, customKept=%d",
                 owoOpt ? "ON" : "OFF",
-                OwoDerivedOptHelper.getUnwrappedCount(),
-                OwoDerivedOptHelper.getKeptCustomCount()
+                // Guard by mod presence, not by the config flag: never initialize an
+                // optional-mod helper class when its mod is absent (NoClassDefFoundError).
+                ModList.get().isLoaded("owo") ? OwoDerivedOptHelper.getUnwrappedCount() : 0,
+                ModList.get().isLoaded("owo") ? OwoDerivedOptHelper.getKeptCustomCount() : 0
         )).withStyle(ChatFormatting.GREEN));
 
         boolean m2Opt = AtmMemOptConfig.ENABLE_PATCHED_COMPONENT_MAP_OPT.get();
@@ -110,18 +112,18 @@ public final class AtmMemOptCommands {
         sendAndLog(source, logBuf, Component.literal(String.format(
                 "M3 (Iron's SpellContainer): %s | containerHits=%d, slotHits=%d, dataHits=%d, getOrCreateSaved=%d",
                 m3Opt ? "ON" : "OFF",
-                SpellContainerOptHelper.getContainerHits(),
-                SpellContainerOptHelper.getSpellSlotHits(),
-                SpellContainerOptHelper.getSpellDataHits(),
-                SpellContainerOptHelper.getGetOrCreateAvoided()
+                ModList.get().isLoaded("irons_spellbooks") ? SpellContainerOptHelper.getContainerHits() : 0,
+                ModList.get().isLoaded("irons_spellbooks") ? SpellContainerOptHelper.getSpellSlotHits() : 0,
+                ModList.get().isLoaded("irons_spellbooks") ? SpellContainerOptHelper.getSpellDataHits() : 0,
+                ModList.get().isLoaded("irons_spellbooks") ? SpellContainerOptHelper.getGetOrCreateAvoided() : 0
         )).withStyle(ChatFormatting.GREEN));
 
         boolean m4Opt = ModList.get().isLoaded("iris") && AtmMemOptConfig.ENABLE_IRIS_SHADER_CACHE_PURGE.get();
         sendAndLog(source, logBuf, Component.literal(String.format(
                 "M4 (Iris ShaderCache): %s | purges=%d, clearedEntries=%d",
                 m4Opt ? "ON" : "OFF",
-                IrisCachePurger.getPurgeCount(),
-                IrisCachePurger.getTotalEntriesCleared()
+                ModList.get().isLoaded("iris") ? IrisCachePurger.getPurgeCount() : 0,
+                ModList.get().isLoaded("iris") ? IrisCachePurger.getTotalEntriesCleared() : 0
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(

@@ -50,7 +50,13 @@ public class SimpleReloadInstanceMixin {
                 initialTask
         );
         if (instance != null) {
-            instance.done().whenComplete((res, err) -> session.logTop10());
+            instance.done().whenComplete((res, err) -> {
+                if (err != null) {
+                    session.logFailure(err);
+                } else {
+                    session.logTop10();
+                }
+            });
         }
         return instance;
     }

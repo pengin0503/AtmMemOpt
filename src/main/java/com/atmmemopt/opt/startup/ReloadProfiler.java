@@ -74,12 +74,19 @@ public final class ReloadProfiler {
             RELOAD_PROFILES_LOGGED.incrementAndGet();
             AtmMemOpt.LOGGER.info("{}", sb.toString().trim());
         }
+
+        /** Failed reloads are reported but do not count as profiled, completed reloads. */
+        public void logFailure(Throwable error) {
+            AtmMemOpt.LOGGER.warn("[AtmMemOpt] Resource/Datapack Reload failed in {} ms: {}",
+                    (System.nanoTime() - startNanos) / 1_000_000L, error);
+        }
     }
 
     private static final class ListenerTiming {
         final String name;
         volatile long prepNanos;
-        volatile long applyNanos;
+        /** Atomic accumulation: several tasks may be submitted by one listener. */
+        final LongAdder applyNanos = new LongAdder();
 
         ListenerTiming(String name) {
             this.name = name;
@@ -90,11 +97,11 @@ public final class ReloadProfiler {
         }
 
         long applyMs() {
-            return applyNanos / 1_000_000L;
+            return applyNanos.sum() / 1_000_000L;
         }
 
         long totalMs() {
-            return (prepNanos + applyNanos) / 1_000_000L;
+            return (prepNanos + applyNanos.sum()) / 1_000_000L;
         }
     }
 
@@ -134,7 +141,7 @@ public final class ReloadProfiler {
                 try {
                     task.run();
                 } finally {
-                    timing.applyNanos += (System.nanoTime() - applyStart);
+                    timing.applyNanos.add(System.nanoTime() - applyStart);
                 }
             });
 

@@ -94,7 +94,10 @@ public class AtmMemOptMixinPlugin implements IMixinConfigPlugin {
             return AtmMemOptConfig.getEarlyBoolean("enableUnfocusedFpsLimit", true);
         }
 
-        return true;
+        // Fail closed: a mixin added later but not wired into a branch above must not be
+        // silently applied without a config gate / mod-presence check.
+        LOGGER.warn("[AtmMemOpt] Mixin '{}' has no matching config gate; skipping it.", mixinClassName);
+        return false;
     }
 
     private static boolean isModPresent(String modId) {
@@ -117,5 +120,24 @@ public class AtmMemOptMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public void postApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
+        // E3: SpellContainerMixin injects into compiler-generated lambda names. With
+        // require = 0 a renamed lambda no longer crashes startup, so warn explicitly that
+        // interning on that decode path is degraded (skipped).
+        if ("com.atmmemopt.mixin.irons.SpellContainerMixin".equals(mixinClassName)) {
+            boolean codecLambda = false;
+            boolean streamLambda = false;
+            for (var method : targetClass.methods) {
+                if ("lambda$static$4".equals(method.name)) {
+                    codecLambda = true;
+                } else if ("lambda$static$7".equals(method.name)) {
+                    streamLambda = true;
+                }
+            }
+            if (!codecLambda || !streamLambda) {
+                LOGGER.warn("[AtmMemOpt] Iron's SpellContainer codec lambda names changed "
+                        + "(codec={}, stream={}); container interning is degraded (skipped) for those decode paths.",
+                        codecLambda, streamLambda);
+            }
+        }
     }
 }
