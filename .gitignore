@@ -1,0 +1,27 @@
+# Gradle
+.gradle/
+build/
+
+# NeoForge moddev run directories and logs
+run/
+run-data/
+runs/
+logs/
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.eclipse/
+.classpath
+.project
+.settings/
+bin/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local-only files
+*.jar.local
