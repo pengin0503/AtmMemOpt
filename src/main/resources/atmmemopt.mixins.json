@@ -1,0 +1,40 @@
+{
+  "client": [
+    "iris.PipelineManagerMixin",
+    "diag.NativeImageDiagMixin",
+    "startup.JeiElementPrefixParserInvoker",
+    "startup.JeiElementSearchMixin",
+    "render.BlockEntityRenderDispatcherMixin",
+    "render.MinecraftFpsLimitMixin"
+  ],
+  "compatibilityLevel": "JAVA_21",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "minVersion": "0.8",
+  "mixins": [
+    "owo.DerivedComponentMapAccessor",
+    "owo.DerivedComponentMapMixin",
+    "owo.OwoItemStackUnwrapMixin",
+    "components.PatchedDataComponentMapOptMixin",
+    "irons.ISpellContainerMixin",
+    "irons.SpellContainerAccessor",
+    "irons.SpellContainerMixin",
+    "irons.SpellContainerMutableMixin",
+    "irons.SpellDataMixin",
+    "irons.SpellSlotMixin",
+    "enchant.ItemEnchantmentsAccessor",
+    "enchant.ItemEnchantmentsMixin",
+    "enchant.ItemEnchantmentsMutableMixin",
+    "shapes.ArrayVoxelShapeAccessor",
+    "shapes.ArrayVoxelShapeMixin",
+    "shapes.BitSetDiscreteVoxelShapeAccessor",
+    "shapes.ShapesMixin",
+    "shapes.VoxelShapeAccessor",
+    "startup.JeiStuffLootRecipesMixin",
+    "startup.SimpleReloadInstanceMixin"
+  ],
+  "package": "com.atmmemopt.mixin",
+  "plugin": "com.atmmemopt.mixin.AtmMemOptMixinPlugin",
+  "required": true
+}
