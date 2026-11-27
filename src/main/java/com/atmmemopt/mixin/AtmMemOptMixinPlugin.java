@@ -93,6 +93,12 @@ public class AtmMemOptMixinPlugin implements IMixinConfigPlugin {
         if (relative.equals("render.MinecraftFpsLimitMixin")) {
             return AtmMemOptConfig.getEarlyBoolean("enableUnfocusedFpsLimit", true);
         }
+        if (relative.equals("render.ParticleEngineMixin")) {
+            return AtmMemOptConfig.getEarlyBoolean("enableParticleDistanceCulling", true);
+        }
+        if (relative.equals("render.EntityRenderDispatcherMixin")) {
+            return AtmMemOptConfig.getEarlyBoolean("enableEntityDistanceCulling", true);
+        }
 
         // Module 10: DataComponentPatch interning & CoW map sharing
         if (relative.startsWith("patch.")) {

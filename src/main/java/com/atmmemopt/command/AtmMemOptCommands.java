@@ -3,6 +3,7 @@ package com.atmmemopt.command;
 import com.atmmemopt.AtmMemOpt;
 import com.atmmemopt.config.AtmMemOptConfig;
 import com.atmmemopt.diag.NativeImageTracker;
+import com.atmmemopt.diag.SpriteMemoryDiagnostics;
 import com.atmmemopt.opt.chunk.PalettedContainerOptHelper;
 import com.atmmemopt.opt.climate.ClimateParameterOptHelper;
 import com.atmmemopt.opt.components.PatchedMapOptStats;
@@ -12,6 +13,8 @@ import com.atmmemopt.opt.irons.SpellContainerOptHelper;
 import com.atmmemopt.opt.owo.OwoDerivedOptHelper;
 import com.atmmemopt.opt.patch.DataComponentPatchOptHelper;
 import com.atmmemopt.opt.render.BerCullingHelper;
+import com.atmmemopt.opt.render.EntityCullingHelper;
+import com.atmmemopt.opt.render.ParticleCullingHelper;
 import com.atmmemopt.opt.resloc.ResourceLocationOptHelper;
 import com.atmmemopt.opt.shapes.VoxelShapeOptHelper;
 import com.atmmemopt.opt.startup.JeiFilterOptHelper;
@@ -58,7 +61,13 @@ public final class AtmMemOptCommands {
                                 .then(Commands.literal("ber")
                                         .executes(ctx -> executeBerDiagReport(ctx.getSource()))
                                         .then(Commands.literal("reset")
-                                                .executes(ctx -> executeBerDiagReset(ctx.getSource())))))
+                                                .executes(ctx -> executeBerDiagReset(ctx.getSource()))))
+                                .then(Commands.literal("entity")
+                                        .executes(ctx -> executeEntityDiagReport(ctx.getSource()))
+                                        .then(Commands.literal("reset")
+                                                .executes(ctx -> executeEntityDiagReset(ctx.getSource()))))
+                                .then(Commands.literal("sprites")
+                                        .executes(ctx -> executeSpritesDiagReport(ctx.getSource()))))
         );
     }
 
@@ -175,13 +184,29 @@ public final class AtmMemOptCommands {
         boolean m9Ber = AtmMemOptConfig.ENABLE_BER_DISTANCE_CULLING.get();
         boolean m9Fps = AtmMemOptConfig.ENABLE_UNFOCUSED_FPS_LIMIT.get();
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M9 (Render Opt): berCull=%s (dist=%d, culled=%d, rendered=%d), unfocusedFps=%s (%dfps)",
+                "M9a/b (Render Opt): berCull=%s (dist=%d, culled=%d, rendered=%d), unfocusedFps=%s (%dfps)",
                 m9Ber ? "ON" : "OFF",
                 BerCullingHelper.getCachedMaxDist(),
                 BerCullingHelper.getCulledCount(),
                 BerCullingHelper.getRenderedCount(),
                 m9Fps ? "ON" : "OFF",
                 AtmMemOptConfig.UNFOCUSED_FPS_LIMIT.get()
+        )).withStyle(ChatFormatting.GREEN));
+
+        boolean m9Particle = AtmMemOptConfig.ENABLE_PARTICLE_DISTANCE_CULLING.get();
+        boolean m9Entity = AtmMemOptConfig.ENABLE_ENTITY_DISTANCE_CULLING.get();
+        sendAndLog(source, logBuf, Component.literal(String.format(
+                "M9c/d (Cull Opt): particleCull=%s (dist=%d, culled=%d [dist=%d, unfocus=%d]), entityCull=%s (dist=%d/%d/%d, culled=%d)",
+                m9Particle ? "ON" : "OFF",
+                ParticleCullingHelper.getCachedMaxDist(),
+                ParticleCullingHelper.getTotalCulled(),
+                ParticleCullingHelper.getCulledDistance(),
+                ParticleCullingHelper.getCulledUnfocused(),
+                m9Entity ? "ON" : "OFF",
+                EntityCullingHelper.getCachedGeneralDist(),
+                EntityCullingHelper.getCachedItemDist(),
+                EntityCullingHelper.getCachedXpDist(),
+                EntityCullingHelper.getCulledCount()
         )).withStyle(ChatFormatting.GREEN));
 
         boolean m10Opt = AtmMemOptConfig.ENABLE_DATA_COMPONENT_PATCH_OPT.get();
@@ -347,6 +372,67 @@ public final class AtmMemOptCommands {
         source.sendSuccess(() -> Component.literal(
                 "[AtmMemOpt] BER diagnostic counters cleared."
         ).withStyle(ChatFormatting.GREEN), false);
+        return 1;
+    }
+
+    private static int executeEntityDiagReport(CommandSourceStack source) {
+        List<EntityCullingHelper.EntityDiagSnapshot> top = EntityCullingHelper.getTopEntityStats(20);
+        StringBuilder logBuf = new StringBuilder();
+        sendAndLog(source, logBuf, Component.literal(String.format(
+                "=== Entity Culling Diagnostics (dist=%d/item=%d/xp=%d, rendered=%d, culled=%d) ===",
+                EntityCullingHelper.getCachedGeneralDist(),
+                EntityCullingHelper.getCachedItemDist(),
+                EntityCullingHelper.getCachedXpDist(),
+                EntityCullingHelper.getRenderedCount(),
+                EntityCullingHelper.getCulledCount()
+        )).withStyle(ChatFormatting.GOLD));
+
+        if (top.isEmpty()) {
+            sendAndLog(source, logBuf, Component.literal("No entity renders recorded yet.").withStyle(ChatFormatting.GREEN));
+        } else {
+            int rank = 1;
+            for (EntityCullingHelper.EntityDiagSnapshot s : top) {
+                sendAndLog(source, logBuf, Component.literal(String.format(
+                        "#%02d rendered=%d, culled=%d%s | %s",
+                        rank++, s.rendered(), s.culled(),
+                        s.whitelisted() ? " [WHITELIST]" : "",
+                        s.className()
+                )).withStyle(ChatFormatting.WHITE));
+            }
+        }
+        AtmMemOpt.LOGGER.info("\n{}", logBuf);
+        return 1;
+    }
+
+    private static int executeEntityDiagReset(CommandSourceStack source) {
+        EntityCullingHelper.resetDiag();
+        source.sendSuccess(() -> Component.literal(
+                "[AtmMemOpt] Entity diagnostic counters cleared."
+        ).withStyle(ChatFormatting.GREEN), false);
+        return 1;
+    }
+
+    private static int executeSpritesDiagReport(CommandSourceStack source) {
+        SpriteMemoryDiagnostics.Report report = SpriteMemoryDiagnostics.inspect();
+        StringBuilder logBuf = new StringBuilder();
+        sendAndLog(source, logBuf, Component.literal(String.format(
+                "=== SpriteAtlas NativeImage Diagnostics (atlases=%d, sprites=%d, animated=%d, liveImg=%d, closedImg=%d, estNative=%s) ===",
+                report.atlases().size(),
+                report.totalSprites(),
+                report.totalAnimated(),
+                report.totalLiveImages(),
+                report.totalClosedImages(),
+                fmtMB(report.totalNativeBytes())
+        )).withStyle(ChatFormatting.GOLD));
+
+        int rank = 1;
+        for (SpriteMemoryDiagnostics.AtlasSummary a : report.atlases()) {
+            sendAndLog(source, logBuf, Component.literal(String.format(
+                    "#%02d %s | sprites=%d (anim=%d), liveImg=%d, closedImg=%d, estNative=%s",
+                    rank++, a.atlasId(), a.sprites(), a.animated(), a.liveImages(), a.closedImages(), fmtMB(a.nativeBytes())
+            )).withStyle(ChatFormatting.WHITE));
+        }
+        AtmMemOpt.LOGGER.info("\n{}", logBuf);
         return 1;
     }
 

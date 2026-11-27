@@ -5,7 +5,9 @@
     "startup.JeiElementPrefixParserInvoker",
     "startup.JeiElementSearchMixin",
     "render.BlockEntityRenderDispatcherMixin",
-    "render.MinecraftFpsLimitMixin"
+    "render.MinecraftFpsLimitMixin",
+    "render.ParticleEngineMixin",
+    "render.EntityRenderDispatcherMixin"
   ],
   "compatibilityLevel": "JAVA_21",
   "injectors": {

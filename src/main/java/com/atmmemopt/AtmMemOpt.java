@@ -6,6 +6,8 @@ import com.atmmemopt.opt.climate.ClimateParameterOptHelper;
 import com.atmmemopt.opt.enchant.ItemEnchantmentsOptHelper;
 import com.atmmemopt.opt.patch.DataComponentPatchOptHelper;
 import com.atmmemopt.opt.render.BerCullingHelper;
+import com.atmmemopt.opt.render.EntityCullingHelper;
+import com.atmmemopt.opt.render.ParticleCullingHelper;
 import com.atmmemopt.opt.resloc.ResourceLocationOptHelper;
 import com.mojang.logging.LogUtils;
 import net.neoforged.api.distmarker.Dist;
@@ -58,6 +60,8 @@ public class AtmMemOpt {
         ResourceLocationOptHelper.refreshConfig();
         if (FMLEnvironment.dist == Dist.CLIENT) {
             BerCullingHelper.refreshConfig();
+            ParticleCullingHelper.refreshConfig();
+            EntityCullingHelper.refreshConfig();
         }
     }
 

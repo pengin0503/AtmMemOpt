@@ -3,7 +3,7 @@
 Personal memory & performance optimization mod for **All the Mods 10 (ATM10)**.
 
 - **Minecraft:** 1.21.1 / **NeoForge:** 21.1.266 / **Java:** 21
-- **Status:** Phase 5 — M10〜M13 (`DataComponentPatch`, `PalettedContainer`, `ResourceLocation`, `Climate.Parameter`) + M7/M9a enhancements implemented; ready for build & in-game verification
+- **Status:** Phase 6 — M9c/M9d (`ParticleEngine` / `EntityRenderDispatcher` culling) + M10〜M13 + `/atmmemopt diag sprites` implemented; ready for build & in-game verification
 - **License:** MIT
 
 > ⚠️ Built and tuned for one specific ATM10 (v8.6, 400+ mods) setup. It patches internals of other mods via mixins, so it may break on different mod sets or versions. Use at your own risk. Every module can be switched off individually (see Configuration).
@@ -26,6 +26,8 @@ AtmMemOpt reduces heap pressure and GC churn in a large modpack by interning / s
 | M8c | Vanilla reload | Logs the top 10 slowest resource/data-pack reload listeners |
 | M9a | Vanilla rendering | Distance-culls BlockEntityRenderer beyond 48 blocks (large multiblocks whitelisted, config hot-reload & `/atmmemopt diag ber` included) |
 | M9b | Vanilla client | Caps FPS at 15 while the window is unfocused |
+| M9c | Vanilla particles | Distance-culls particle spawning beyond 48 blocks (before allocation) and suppresses new particles while unfocused |
+| M9d | Vanilla entities | Distance-culls non-whitelisted entities (64 blocks general / 32 blocks `ItemEntity` / 24 blocks `ExperienceOrb`; players, bosses, `noCulling` auto-excluded) |
 | M10 | Vanilla (`DataComponentPatch`) | Interns immutable `DataComponentPatch` instances (single-entry fast path + bounded weak cache) and shares backing `Reference2ObjectMap` copy-on-write on `asPatch()` |
 | M11 | Vanilla (`PalettedContainer`) | Replaces per-container `ThreadingDetector` (`Semaphore` + `ReentrantLock`) with a shared no-op detector |
 | M12 | Vanilla (`ResourceLocation`) | Interns `namespace` strings (zero-alloc `"minecraft"` fast path) and deduplicates `ResourceLocation` instances in a bounded weak cache |
@@ -40,6 +42,8 @@ Measured results (Phase 4, spark heap summary): the former top heap consumers (`
 - `/atmmemopt purge-caches` — purges all weak/shader caches across M3, M4, M6, M7, M10, M12, and M13
 - `/atmmemopt diag nativeimage [on|off|reset]` — top 20 allocation sites of unclosed `NativeImage`s (requires M5 enabled + restart)
 - `/atmmemopt diag ber [reset]` — top 20 dispatched/culled BlockEntityRenderer classes (with whitelist status)
+- `/atmmemopt diag entity [reset]` — top 20 rendered/culled Entity classes (with whitelist status)
+- `/atmmemopt diag sprites` — zero-overhead breakdown of `TextureAtlas` / `SpriteContents` live `NativeImage` counts and estimated native memory usage
 
 ## Configuration
 

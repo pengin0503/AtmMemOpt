@@ -41,6 +41,14 @@ public final class AtmMemOptConfig {
     public static final ModConfigSpec.ConfigValue<List<? extends String>> BER_CULLING_WHITELIST;
     public static final ModConfigSpec.BooleanValue ENABLE_UNFOCUSED_FPS_LIMIT;
     public static final ModConfigSpec.IntValue UNFOCUSED_FPS_LIMIT;
+    public static final ModConfigSpec.BooleanValue ENABLE_PARTICLE_DISTANCE_CULLING;
+    public static final ModConfigSpec.IntValue PARTICLE_CULLING_DISTANCE;
+    public static final ModConfigSpec.BooleanValue UNFOCUSED_SKIP_PARTICLES;
+    public static final ModConfigSpec.BooleanValue ENABLE_ENTITY_DISTANCE_CULLING;
+    public static final ModConfigSpec.IntValue ENTITY_CULLING_DISTANCE;
+    public static final ModConfigSpec.IntValue ITEM_ENTITY_CULLING_DISTANCE;
+    public static final ModConfigSpec.IntValue XP_ORB_CULLING_DISTANCE;
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> ENTITY_CULLING_WHITELIST;
     public static final ModConfigSpec.BooleanValue ENABLE_DATA_COMPONENT_PATCH_OPT;
     public static final ModConfigSpec.IntValue DATA_COMPONENT_PATCH_MAX_CACHE_ENTRIES;
     public static final ModConfigSpec.BooleanValue ENABLE_PALETTED_CONTAINER_OPT;
@@ -148,6 +156,50 @@ public final class AtmMemOptConfig {
         UNFOCUSED_FPS_LIMIT = builder
                 .comment("Module 9b: Framerate limit when Minecraft window is unfocused.")
                 .defineInRange("unfocusedFpsLimit", 15, 1, 60);
+
+        ENABLE_PARTICLE_DISTANCE_CULLING = builder
+                .comment("Module 9c: Skip creating particles beyond particleCullingDistance blocks (and optionally while unfocused).")
+                .define("enableParticleDistanceCulling", true);
+
+        PARTICLE_CULLING_DISTANCE = builder
+                .comment("Module 9c: Maximum spawn distance (in blocks) for client particles.")
+                .defineInRange("particleCullingDistance", 48, 16, 256);
+
+        UNFOCUSED_SKIP_PARTICLES = builder
+                .comment("Module 9c: Skip spawning new particles while the Minecraft window is unfocused.")
+                .define("unfocusedSkipParticles", true);
+
+        ENABLE_ENTITY_DISTANCE_CULLING = builder
+                .comment("Module 9d: Distance-cull non-whitelisted entities in EntityRenderDispatcher#shouldRender.")
+                .define("enableEntityDistanceCulling", true);
+
+        ENTITY_CULLING_DISTANCE = builder
+                .comment("Module 9d: Maximum render distance (in blocks) for general non-whitelisted entities.")
+                .defineInRange("entityCullingDistance", 64, 16, 256);
+
+        ITEM_ENTITY_CULLING_DISTANCE = builder
+                .comment("Module 9d: Maximum render distance (in blocks) for dropped ItemEntity instances.")
+                .defineInRange("itemEntityCullingDistance", 32, 8, 128);
+
+        XP_ORB_CULLING_DISTANCE = builder
+                .comment("Module 9d: Maximum render distance (in blocks) for ExperienceOrb instances.")
+                .defineInRange("xpOrbCullingDistance", 24, 8, 128);
+
+        ENTITY_CULLING_WHITELIST = builder
+                .comment("Module 9d: Class name substrings excluded from entity distance culling (bosses, contraptions, vehicles, etc.).")
+                .defineListAllowEmpty(
+                        "entityCullingWhitelist",
+                        List.of(
+                                "com.simibubi.create",
+                                "Boss",
+                                "Dragon",
+                                "Wither",
+                                "cataclysm",
+                                "irons_spellbooks",
+                                "twilightforest.entity.boss"
+                        ),
+                        o -> o instanceof String
+                );
 
         ENABLE_DATA_COMPONENT_PATCH_OPT = builder
                 .comment("Module 10: Intern immutable DataComponentPatch instances and share their backing Reference2ObjectMap copy-on-write in PatchedDataComponentMap.")

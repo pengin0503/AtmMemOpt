@@ -41,6 +41,8 @@ cd "C:\Users\pengin0053\.gemini\antigravity\scratch\AtmMemOpt"
 | **M8c** | リソース＆データパック読み込み計測ログ | バニラ (`SimpleReloadInstance`) | `SimpleReloadInstance#of` 内のコンストラクタを `@WrapOperation` でラップ（`ThreadLocal` 不使用）。リロード完了時に Top 10 の `prepare` / `apply` 所要時間（ms）をログ出力。 | 実機検証済 |
 | **M9a** | BlockEntityRenderer (BER) 距離カリング | バニラ (`BlockEntityRenderDispatcher`) | カメラ距離 `berCullingDistance`（デフォルト 48ブロック）超の BER 描画をゼロアロケーション距離判定でスキップ。Phase 5 で Config リロード即時反映（距離・ホワイトリスト再評価）と `/atmmemopt diag ber` 診断集計を追加。 | 実機検証済＋Phase 5 強化 |
 | **M9b** | 非アクティブ時 FPS 制限 | バニラ (`Minecraft#getFramerateLimit`) | `!windowActive` 時に `unfocusedFpsLimit`（デフォルト 15 FPS）へ上限を制限。 | 実機検証済 |
+| **M9c** | パーティクル距離カリング ＆ 非アクティブ抑制 | バニラ (`ParticleEngine`) | `createParticle` 冒頭でカメラ距離 `particleCullingDistance`（デフォルト 48ブロック）超または非アクティブ時のパーティクル生成をアロケーション前にスキップ。Config ホットリロード対応。 | Phase 6 実装済（未実機テスト） |
+| **M9d** | エンティティ描画距離カリング | バニラ (`EntityRenderDispatcher`) | `shouldRender` 冒頭でゼロアロケーション距離カリング（一般 64 / `ItemEntity` 32 / `ExperienceOrb` 24 ブロック）。プレイヤー・ボス・`noCulling`・Config ホワイトリストを自動除外。`/atmmemopt diag entity` 診断付き。 | Phase 6 実装済（未実機テスト） |
 | **M10** | `DataComponentPatch` インターン化 & CoW マップ共有 | バニラ (`DataComponentPatch`, `DataComponentPatch$Builder`, `PatchedDataComponentMap`) | `CODEC` / `STREAM_CODEC` / `Builder#build()` / `forget()` / `asPatch()` をフックし、不変の `DataComponentPatch`（1エントリ専用 `SinglePatchKey` 高速パス＋上限 65,536 の弱参照キャッシュ）を共有。`asPatch()` 時は `PatchedDataComponentMap.patch` も共有マップへ `copyOnWrite = true` で差し替え（`invasiveopts` と完全互換）。`LoggingOut` / `ServerStoppedEvent` / `TagsUpdatedEvent` で自動クリア。 | Phase 5 実装済（未実機テスト） |
 | **M11** | `PalettedContainer` `ThreadingDetector` 共有・no-op 化 | バニラ (`PalettedContainer`, `ThreadingDetector`) | 全コンストラクタの `new ThreadingDetector("PalettedContainer")` を単一共有 no-op インスタンスへ差し替え、`acquire()` / `release()` のロック負荷を削減（`ThreadingDetectorMixin` で直接呼び出し時の安全網も実装）。 | Phase 5 実装済（未実機テスト） |
 | **M12** | `ResourceLocation` 重複排除 ＆ `namespace` インターン化 | バニラ (`ResourceLocation`) | コンストラクタで `namespace` をインターン（`"minecraft"` はゼロアロケーション定数返却）、ファクトリ全経路で `ResourceLocation` 本体を弱参照キャッシュ（上限 131,072）により重複排除。 | Phase 5 実装済（未実機テスト） |
@@ -55,6 +57,8 @@ cd "C:\Users\pengin0053\.gemini\antigravity\scratch\AtmMemOpt"
 - `/atmmemopt purge-caches` — M3 / M4 / M6 / M7 / M10 / M12 / M13 のキャッシュを一括パージし、解放件数を出力。
 - `/atmmemopt diag nativeimage [on|off|reset]` — 未解放 `NativeImage` の呼び出し元 TOP20 を出力（Mixin 自体は Config の `enableNativeImageDiagnostics = true` ＋再起動で有効化）。
 - `/atmmemopt diag ber [reset]` — BER のクラス別描画回数・カリング回数・ホワイトリスト状態の TOP20 を出力。
+- `/atmmemopt diag entity [reset]` — Entity のクラス別描画回数・カリング回数・ホワイトリスト状態の TOP20 を出力。
+- `/atmmemopt diag sprites` — 全 `TextureAtlas` の `SpriteContents` が保持している未解放 `NativeImage` 数と推定ネイティブメモリ消費量（MB）をオーバーヘッドゼロで出力。
 
 ---
 
@@ -81,6 +85,14 @@ berCullingDistance = 48                # M9a
 berCullingWhitelist = [ ... ]          # M9a (Beacon/EndGateway/Mekanism/Reactors/IE/Create等)
 enableUnfocusedFpsLimit = true         # M9b
 unfocusedFpsLimit = 15                 # M9b
+enableParticleDistanceCulling = true   # M9c
+particleCullingDistance = 48           # M9c
+unfocusedSkipParticles = true          # M9c
+enableEntityDistanceCulling = true     # M9d
+entityCullingDistance = 64             # M9d
+itemEntityCullingDistance = 32         # M9d
+xpOrbCullingDistance = 24              # M9d
+entityCullingWhitelist = [ ... ]       # M9d (Create/Boss/Dragon/Wither/Cataclysm等)
 enableDataComponentPatchOpt = true     # M10
 dataComponentPatchMaxCacheEntries = 65536 # M10
 enablePalettedContainerOpt = true      # M11
