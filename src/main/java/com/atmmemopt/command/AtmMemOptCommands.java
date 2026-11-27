@@ -10,6 +10,7 @@ import com.atmmemopt.opt.components.PatchedMapOptStats;
 import com.atmmemopt.opt.enchant.ItemEnchantmentsOptHelper;
 import com.atmmemopt.opt.iris.IrisCachePurger;
 import com.atmmemopt.opt.irons.SpellContainerOptHelper;
+import com.atmmemopt.opt.model.BakedQuadOptHelper;
 import com.atmmemopt.opt.owo.OwoDerivedOptHelper;
 import com.atmmemopt.opt.patch.DataComponentPatchOptHelper;
 import com.atmmemopt.opt.render.BerCullingHelper;
@@ -19,6 +20,8 @@ import com.atmmemopt.opt.resloc.ResourceLocationOptHelper;
 import com.atmmemopt.opt.shapes.VoxelShapeOptHelper;
 import com.atmmemopt.opt.startup.JeiFilterOptHelper;
 import com.atmmemopt.opt.startup.ReloadProfiler;
+import com.atmmemopt.opt.tags.TagEntryOptHelper;
+import com.atmmemopt.opt.texture.SpriteMipmapReleaseHelper;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -67,7 +70,9 @@ public final class AtmMemOptCommands {
                                         .then(Commands.literal("reset")
                                                 .executes(ctx -> executeEntityDiagReset(ctx.getSource()))))
                                 .then(Commands.literal("sprites")
-                                        .executes(ctx -> executeSpritesDiagReport(ctx.getSource()))))
+                                        .executes(ctx -> executeSpritesDiagReport(ctx.getSource())))
+                                .then(Commands.literal("all")
+                                        .executes(ctx -> executeAllDiagnostics(ctx.getSource()))))
         );
     }
 
@@ -245,6 +250,33 @@ public final class AtmMemOptCommands {
                 ClimateParameterOptHelper.getCacheSize()
         )).withStyle(ChatFormatting.GREEN));
 
+        boolean m14Opt = AtmMemOptConfig.ENABLE_SPRITE_MIPMAP_RELEASE.get();
+        sendAndLog(source, logBuf, Component.literal(String.format(
+                "M14 (SpriteMipmap): %s | spritesTrimmed=%d, mipImagesClosed=%d, estFreed=%s",
+                m14Opt ? "ON" : "OFF",
+                SpriteMipmapReleaseHelper.getSpritesTrimmed(),
+                SpriteMipmapReleaseHelper.getImagesClosed(),
+                fmtMB(SpriteMipmapReleaseHelper.getEstimatedBytesFreed())
+        )).withStyle(ChatFormatting.GREEN));
+
+        boolean m15Opt = AtmMemOptConfig.ENABLE_BAKED_QUAD_VERTEX_DEDUP.get();
+        sendAndLog(source, logBuf, Component.literal(String.format(
+                "M15 (BakedQuad int[]): %s | hits=%d, estSaved=%s, cacheSize=%d/%d",
+                m15Opt ? "ON" : "OFF",
+                BakedQuadOptHelper.getVertexHits(),
+                fmtMB(BakedQuadOptHelper.getEstimatedBytesSaved()),
+                BakedQuadOptHelper.getCacheSize(),
+                BakedQuadOptHelper.getCachedMaxEntries()
+        )).withStyle(ChatFormatting.GREEN));
+
+        boolean m16Opt = AtmMemOptConfig.ENABLE_TAG_ENTRY_OPT.get();
+        sendAndLog(source, logBuf, Component.literal(String.format(
+                "M16 (TagEntry): %s | internHits=%d, cacheSize=%d",
+                m16Opt ? "ON" : "OFF",
+                TagEntryOptHelper.getInternHits(),
+                TagEntryOptHelper.getCacheSize()
+        )).withStyle(ChatFormatting.GREEN));
+
         AtmMemOpt.LOGGER.info("\n{}", logBuf);
         return 1;
     }
@@ -330,10 +362,12 @@ public final class AtmMemOptCommands {
         int m10Cleared = DataComponentPatchOptHelper.clearCache();
         int m12Cleared = ResourceLocationOptHelper.clearWeakCache();
         int m13Cleared = ClimateParameterOptHelper.clearCache();
+        int m15Cleared = BakedQuadOptHelper.clearCache();
+        int m16Cleared = TagEntryOptHelper.clearCache();
 
         Component msg = Component.literal(String.format(
-                "[AtmMemOpt] Purged caches: M3=%d, M4=%d, M6=%d, M7=%d, M10=%d, M12=%d, M13=%d",
-                m3Cleared, m4Cleared, m6Cleared, m7Cleared, m10Cleared, m12Cleared, m13Cleared
+                "[AtmMemOpt] Purged caches: M3=%d, M4=%d, M6=%d, M7=%d, M10=%d, M12=%d, M13=%d, M15=%d, M16=%d",
+                m3Cleared, m4Cleared, m6Cleared, m7Cleared, m10Cleared, m12Cleared, m13Cleared, m15Cleared, m16Cleared
         )).withStyle(ChatFormatting.GREEN);
         source.sendSuccess(() -> msg, false);
         AtmMemOpt.LOGGER.info("{}", msg.getString());
@@ -433,6 +467,17 @@ public final class AtmMemOptCommands {
             )).withStyle(ChatFormatting.WHITE));
         }
         AtmMemOpt.LOGGER.info("\n{}", logBuf);
+        return 1;
+    }
+
+    private static int executeAllDiagnostics(CommandSourceStack source) {
+        executeStatus(source);
+        executeSpritesDiagReport(source);
+        executeBerDiagReport(source);
+        executeEntityDiagReport(source);
+        if (NativeImageTracker.isMixinApplied()) {
+            executeNativeImageReport(source);
+        }
         return 1;
     }
 

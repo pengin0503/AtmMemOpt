@@ -3,7 +3,7 @@
 Personal memory & performance optimization mod for **All the Mods 10 (ATM10)**.
 
 - **Minecraft:** 1.21.1 / **NeoForge:** 21.1.266 / **Java:** 21
-- **Status:** Phase 6 — M9c/M9d (`ParticleEngine` / `EntityRenderDispatcher` culling) + M10〜M13 + `/atmmemopt diag sprites` implemented; ready for build & in-game verification
+- **Status:** Phase 7 — M14〜M16 (`SpriteContents` mipmap release, `BakedQuad` vertex dedup, `TagEntry` interning) + `/atmmemopt diag all` implemented; ready for build & in-game verification
 - **License:** MIT
 
 > ⚠️ Built and tuned for one specific ATM10 (v8.6, 400+ mods) setup. It patches internals of other mods via mixins, so it may break on different mod sets or versions. Use at your own risk. Every module can be switched off individually (see Configuration).
@@ -32,14 +32,18 @@ AtmMemOpt reduces heap pressure and GC churn in a large modpack by interning / s
 | M11 | Vanilla (`PalettedContainer`) | Replaces per-container `ThreadingDetector` (`Semaphore` + `ReentrantLock`) with a shared no-op detector |
 | M12 | Vanilla (`ResourceLocation`) | Interns `namespace` strings (zero-alloc `"minecraft"` fast path) and deduplicates `ResourceLocation` instances in a bounded weak cache |
 | M13 | Vanilla (`Climate.Parameter`) | Interns immutable `Biome` `Climate.Parameter(min, max)` instances |
+| M14 | Vanilla (`SpriteContents`) | Closes and drops static sprite mipmap `NativeImage` levels (1..N) after GPU atlas upload (keeps `originalImage` level 0 intact) |
+| M15 | Vanilla (`BakedQuad`) | Deduplicates identical `BakedQuad` vertex `int[]` arrays in a bounded weak cache |
+| M16 | Vanilla (`TagEntry`) | Interns immutable `TagEntry` instances across datapack tags |
 
 Measured results (Phase 4, spark heap summary): the former top heap consumers (`DerivedComponentMap`, `ItemEnchantments`, `SpellContainer`, `CommonToken`) all dropped out of the top 100; JEI filter build 15.9 s → 0.8 s; ZGC major-GC interval 19.9 s → 105 s.
 
 ## Commands (client)
 
-- `/atmmemopt status` — heap / metaspace / direct-buffer usage plus per-module state and savings counters (M1〜M13)
+- `/atmmemopt status` — heap / metaspace / direct-buffer usage plus per-module state and savings counters (M1〜M16)
 - `/atmmemopt purge-shader-cache` — immediately releases the Iris `glsl_transformer` caches
-- `/atmmemopt purge-caches` — purges all weak/shader caches across M3, M4, M6, M7, M10, M12, and M13
+- `/atmmemopt purge-caches` — purges all weak/shader caches across M3, M4, M6, M7, M10, M12, M13, M15, and M16
+- `/atmmemopt diag all` — runs `status` + `sprites` + `ber` + `entity` (+ `nativeimage` if M5 is enabled) in a single command
 - `/atmmemopt diag nativeimage [on|off|reset]` — top 20 allocation sites of unclosed `NativeImage`s (requires M5 enabled + restart)
 - `/atmmemopt diag ber [reset]` — top 20 dispatched/culled BlockEntityRenderer classes (with whitelist status)
 - `/atmmemopt diag entity [reset]` — top 20 rendered/culled Entity classes (with whitelist status)

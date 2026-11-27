@@ -47,14 +47,18 @@ cd "C:\Users\pengin0053\.gemini\antigravity\scratch\AtmMemOpt"
 | **M11** | `PalettedContainer` `ThreadingDetector` 共有・no-op 化 | バニラ (`PalettedContainer`, `ThreadingDetector`) | 全コンストラクタの `new ThreadingDetector("PalettedContainer")` を単一共有 no-op インスタンスへ差し替え、`acquire()` / `release()` のロック負荷を削減（`ThreadingDetectorMixin` で直接呼び出し時の安全網も実装）。 | Phase 5 実装済（未実機テスト） |
 | **M12** | `ResourceLocation` 重複排除 ＆ `namespace` インターン化 | バニラ (`ResourceLocation`) | コンストラクタで `namespace` をインターン（`"minecraft"` はゼロアロケーション定数返却）、ファクトリ全経路で `ResourceLocation` 本体を弱参照キャッシュ（上限 131,072）により重複排除。 | Phase 5 実装済（未実機テスト） |
 | **M13** | `Biome.Climate$Parameter` インターン化 | バニラ (`Climate$Parameter`) | `CODEC` / `point()` / `span()` で生成される不変レコード `Climate.Parameter(min, max)` を弱参照キャッシュ（上限 32,768）で共有。 | Phase 5 実装済（未実機テスト） |
+| **M14** | `SpriteContents` 静止ミップマップ `NativeImage` 解放 | バニラ (`SpriteContents`) | 静止スプライト（`animatedTexture == null`）の GPU アトラス転送（`uploadFirstFrame` 内 `upload`）完了直後に `byMipLevel[1..N]` の `NativeImage` を `close()` して配列を 1 要素へ縮小（`originalImage` level 0 は維持）。 | Phase 7 実装済（未実機テスト） |
+| **M15** | `BakedQuad` 頂点配列 (`int[]`) 重複排除 | バニラ (`BakedQuad`) | 6引数コンストラクタ末尾で同一の頂点配列 `int[]` を弱参照キャッシュ（上限 65,536、防御コピー保持）により共有。 | Phase 7 実装済（未実機テスト） |
+| **M16** | `TagEntry` インターン化 | バニラ (`TagEntry`) | `CODEC` / `element()` / `optionalElement()` / `tag()` / `optionalTag()` で生成される不変 `TagEntry` を弱参照キャッシュ（上限 65,536）で共有。 | Phase 7 実装済（未実機テスト） |
 
 ---
 
 ## 3. コマンド一覧（クライアントコマンド）
 
-- `/atmmemopt status` — Heap / Non-Heap / Metaspace / Old Gen / DirectBuffer 使用量と、M1〜M13 全モジュールの状態・削減カウントをチャット＋ログに出力。
+- `/atmmemopt status` — Heap / Non-Heap / Metaspace / Old Gen / DirectBuffer 使用量と、M1〜M16 全モジュールの状態・削減カウントをチャット＋ログに出力。
 - `/atmmemopt purge-shader-cache` — Iris / `glsl_transformer` のキャッシュとストリーム参照を即時解放し、解放件数を出力。
-- `/atmmemopt purge-caches` — M3 / M4 / M6 / M7 / M10 / M12 / M13 のキャッシュを一括パージし、解放件数を出力。
+- `/atmmemopt purge-caches` — M3 / M4 / M6 / M7 / M10 / M12 / M13 / M15 / M16 のキャッシュを一括パージし、解放件数を出力。
+- `/atmmemopt diag all` — `status` + `sprites` + `ber` + `entity`（＋M5有効時は `nativeimage`）を 1 回で一括出力。
 - `/atmmemopt diag nativeimage [on|off|reset]` — 未解放 `NativeImage` の呼び出し元 TOP20 を出力（Mixin 自体は Config の `enableNativeImageDiagnostics = true` ＋再起動で有効化）。
 - `/atmmemopt diag ber [reset]` — BER のクラス別描画回数・カリング回数・ホワイトリスト状態の TOP20 を出力。
 - `/atmmemopt diag entity [reset]` — Entity のクラス別描画回数・カリング回数・ホワイトリスト状態の TOP20 を出力。
@@ -99,6 +103,10 @@ enablePalettedContainerOpt = true      # M11
 enableResourceLocationOpt = true       # M12
 resourceLocationMaxCacheEntries = 131072  # M12
 enableClimateParameterOpt = true       # M13
+enableSpriteMipmapRelease = true       # M14
+enableBakedQuadVertexDedup = true      # M15
+bakedQuadMaxCacheEntries = 65536       # M15
+enableTagEntryOpt = true               # M16
 ```
 
 ---

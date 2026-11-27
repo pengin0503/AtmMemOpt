@@ -120,6 +120,21 @@ public class AtmMemOptMixinPlugin implements IMixinConfigPlugin {
             return AtmMemOptConfig.getEarlyBoolean("enableClimateParameterOpt", true);
         }
 
+        // Module 14: Static SpriteContents mipmap NativeImage release
+        if (relative.startsWith("texture.")) {
+            return AtmMemOptConfig.getEarlyBoolean("enableSpriteMipmapRelease", true);
+        }
+
+        // Module 15: BakedQuad vertex int[] deduplication
+        if (relative.startsWith("model.")) {
+            return AtmMemOptConfig.getEarlyBoolean("enableBakedQuadVertexDedup", true);
+        }
+
+        // Module 16: TagEntry interning
+        if (relative.startsWith("tags.")) {
+            return AtmMemOptConfig.getEarlyBoolean("enableTagEntryOpt", true);
+        }
+
         return true;
     }
 

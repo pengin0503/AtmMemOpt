@@ -4,11 +4,13 @@ import com.atmmemopt.command.AtmMemOptCommands;
 import com.atmmemopt.config.AtmMemOptConfig;
 import com.atmmemopt.opt.climate.ClimateParameterOptHelper;
 import com.atmmemopt.opt.enchant.ItemEnchantmentsOptHelper;
+import com.atmmemopt.opt.model.BakedQuadOptHelper;
 import com.atmmemopt.opt.patch.DataComponentPatchOptHelper;
 import com.atmmemopt.opt.render.BerCullingHelper;
 import com.atmmemopt.opt.render.EntityCullingHelper;
 import com.atmmemopt.opt.render.ParticleCullingHelper;
 import com.atmmemopt.opt.resloc.ResourceLocationOptHelper;
+import com.atmmemopt.opt.tags.TagEntryOptHelper;
 import com.mojang.logging.LogUtils;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
@@ -39,10 +41,12 @@ public class AtmMemOpt {
             ItemEnchantmentsOptHelper.clearCache();
             DataComponentPatchOptHelper.clearCache();
             ClimateParameterOptHelper.clearCache();
+            TagEntryOptHelper.clearCache();
         });
         NeoForge.EVENT_BUS.addListener((TagsUpdatedEvent event) -> {
             ItemEnchantmentsOptHelper.clearCache();
             DataComponentPatchOptHelper.clearCache();
+            TagEntryOptHelper.clearCache();
         });
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
@@ -62,6 +66,7 @@ public class AtmMemOpt {
             BerCullingHelper.refreshConfig();
             ParticleCullingHelper.refreshConfig();
             EntityCullingHelper.refreshConfig();
+            BakedQuadOptHelper.refreshConfig();
         }
     }
 
@@ -73,6 +78,7 @@ public class AtmMemOpt {
                 ItemEnchantmentsOptHelper.clearCache();
                 DataComponentPatchOptHelper.clearCache();
                 ClimateParameterOptHelper.clearCache();
+                TagEntryOptHelper.clearCache();
             });
         }
     }

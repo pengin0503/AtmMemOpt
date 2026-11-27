@@ -55,6 +55,10 @@ public final class AtmMemOptConfig {
     public static final ModConfigSpec.BooleanValue ENABLE_RESOURCE_LOCATION_OPT;
     public static final ModConfigSpec.IntValue RESOURCE_LOCATION_MAX_CACHE_ENTRIES;
     public static final ModConfigSpec.BooleanValue ENABLE_CLIMATE_PARAMETER_OPT;
+    public static final ModConfigSpec.BooleanValue ENABLE_SPRITE_MIPMAP_RELEASE;
+    public static final ModConfigSpec.BooleanValue ENABLE_BAKED_QUAD_VERTEX_DEDUP;
+    public static final ModConfigSpec.IntValue BAKED_QUAD_MAX_CACHE_ENTRIES;
+    public static final ModConfigSpec.BooleanValue ENABLE_TAG_ENTRY_OPT;
 
     private static volatile Map<String, String> earlyValues;
 
@@ -224,6 +228,22 @@ public final class AtmMemOptConfig {
         ENABLE_CLIMATE_PARAMETER_OPT = builder
                 .comment("Module 13: Intern immutable Biome Climate.Parameter instances.")
                 .define("enableClimateParameterOpt", true);
+
+        ENABLE_SPRITE_MIPMAP_RELEASE = builder
+                .comment("Module 14: Release mipmap NativeImage levels (1..N) of static SpriteContents after GPU atlas upload (keeps originalImage level 0 intact).")
+                .define("enableSpriteMipmapRelease", true);
+
+        ENABLE_BAKED_QUAD_VERTEX_DEDUP = builder
+                .comment("Module 15: Deduplicate identical BakedQuad vertex int[] arrays within a bounded weak cache.")
+                .define("enableBakedQuadVertexDedup", true);
+
+        BAKED_QUAD_MAX_CACHE_ENTRIES = builder
+                .comment("Module 15: Maximum entries in the BakedQuad vertex int[] weak intern cache.")
+                .defineInRange("bakedQuadMaxCacheEntries", 65536, 0, 262144);
+
+        ENABLE_TAG_ENTRY_OPT = builder
+                .comment("Module 16: Intern immutable TagEntry instances across datapack tags.")
+                .define("enableTagEntryOpt", true);
 
         builder.pop();
         SPEC = builder.build();

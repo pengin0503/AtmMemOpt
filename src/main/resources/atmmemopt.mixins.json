@@ -7,7 +7,9 @@
     "render.BlockEntityRenderDispatcherMixin",
     "render.MinecraftFpsLimitMixin",
     "render.ParticleEngineMixin",
-    "render.EntityRenderDispatcherMixin"
+    "render.EntityRenderDispatcherMixin",
+    "texture.SpriteContentsMixin",
+    "model.BakedQuadMixin"
   ],
   "compatibilityLevel": "JAVA_21",
   "injectors": {
@@ -42,7 +44,9 @@
     "chunk.PalettedContainerMixin",
     "chunk.ThreadingDetectorMixin",
     "resloc.ResourceLocationMixin",
-    "climate.ClimateParameterMixin"
+    "climate.ClimateParameterMixin",
+    "tags.TagEntryAccessor",
+    "tags.TagEntryMixin"
   ],
   "package": "com.atmmemopt.mixin",
   "plugin": "com.atmmemopt.mixin.AtmMemOptMixinPlugin",
