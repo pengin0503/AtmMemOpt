@@ -7,7 +7,6 @@ import com.atmmemopt.diag.SpriteMemoryDiagnostics;
 import com.atmmemopt.opt.climate.ClimateParameterOptHelper;
 import com.atmmemopt.opt.enchant.ItemEnchantmentsOptHelper;
 import com.atmmemopt.opt.iris.IrisCachePurger;
-import com.atmmemopt.opt.irons.SpellContainerOptHelper;
 import com.atmmemopt.opt.model.BakedQuadOptHelper;
 import com.atmmemopt.opt.patch.DataComponentPatchOptHelper;
 import com.atmmemopt.opt.render.BerCullingHelper;
@@ -108,7 +107,7 @@ public final class AtmMemOptCommands {
                 BerCullingHelper.getCulledCount(),
                 BerCullingHelper.getRenderedCount(),
                 AtmMemOptServerCommands.formatModuleState("M9b", AtmMemOptConfig.ENABLE_UNFOCUSED_FPS_LIMIT.get()),
-                com.atmmemopt.opt.render.UnfocusedFpsLimitHelper.getCachedLimit()
+                UnfocusedFpsLimitHelper.getCachedLimit()
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
@@ -222,7 +221,9 @@ public final class AtmMemOptCommands {
     }
 
     private static int executePurgeAllCaches(CommandSourceStack source) {
-        int m3Cleared = ModList.get().isLoaded("irons_spellbooks") ? SpellContainerOptHelper.clearWeakCache() : 0;
+        // Route through the server-side bridge; no direct optional-helper reference here.
+        int m3Cleared = ModList.get().isLoaded("irons_spellbooks")
+                ? AtmMemOptServerCommands.IronsSpellbooksBridge.clearWeakCache() : 0;
         int m4Cleared = ModList.get().isLoaded("iris") ? IrisCachePurger.purgeNow().totalEntries() : 0;
         int m6Cleared = ItemEnchantmentsOptHelper.clearCache();
         int m7Cleared = VoxelShapeOptHelper.clearWeakCaches();

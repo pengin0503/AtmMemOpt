@@ -24,7 +24,10 @@ import java.util.concurrent.atomic.LongAdder;
 public final class SpellContainerOptHelper {
     private static final int MAX_STRONG_CACHE = 8192;
     private static final int MAX_CONTAINER_CACHE = 32768;
-    private static final int MAX_EMPTY_SLOT_ARRAY_LEN = 256;
+    /** Legitimate containers are far smaller; clamp corrupt maxSpells values before allocating. */
+    private static final int MAX_EMPTY_SLOT_LENGTH = 64;
+    private static final int MAX_EMPTY_SLOT_CACHE_ENTRIES = MAX_EMPTY_SLOT_LENGTH + 1;
+    private static final SpellSlot[] EMPTY_SLOTS = new SpellSlot[0];
 
     private static final ConcurrentHashMap<SpellDataKey, SpellData> SPELL_DATA_CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<SpellSlotKey, SpellSlot> SPELL_SLOT_CACHE = new ConcurrentHashMap<>();
@@ -104,13 +107,20 @@ public final class SpellContainerOptHelper {
     }
 
     public static SpellSlot[] getEmptySlotArray(int length) {
-        if (length < 0) {
-            return new SpellSlot[0];
+        // The length originates from maxSpells (NBT/network data): clamp it so corrupt
+        // values cannot make us allocate an enormous array or grow the cache without bound.
+        int len = Math.max(0, Math.min(length, MAX_EMPTY_SLOT_LENGTH));
+        if (len == 0) {
+            return EMPTY_SLOTS;
         }
-        if (length > MAX_EMPTY_SLOT_ARRAY_LEN) {
-            return new SpellSlot[length];
+        SpellSlot[] cached = EMPTY_SLOT_ARRAYS.get(len);
+        if (cached != null) {
+            return cached;
         }
-        return EMPTY_SLOT_ARRAYS.computeIfAbsent(length, SpellSlot[]::new);
+        if (EMPTY_SLOT_ARRAYS.size() >= MAX_EMPTY_SLOT_CACHE_ENTRIES) {
+            return new SpellSlot[len];
+        }
+        return EMPTY_SLOT_ARRAYS.computeIfAbsent(len, SpellSlot[]::new);
     }
 
     public static SpellContainer getEmptyContainer(int maxSpells, boolean spellWheel, boolean mustEquip, boolean improved) {

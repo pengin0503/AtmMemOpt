@@ -16,6 +16,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.LongAdder;
 
 /**
@@ -52,6 +53,7 @@ public final class OwoDerivedOptHelper {
     };
 
     private static volatile boolean setterFailed = false;
+    private static final AtomicBoolean ACCESSOR_WARNED = new AtomicBoolean(false);
 
     private OwoDerivedOptHelper() {
     }
@@ -80,7 +82,13 @@ public final class OwoDerivedOptHelper {
             return;
         }
 
-        ComponentMapImplAccessor accessor = (ComponentMapImplAccessor) (Object) components;
+        if (!(((Object) components) instanceof ComponentMapImplAccessor accessor)) {
+            // owo version drift may have removed/retargeted the accessor mixin.
+            if (ACCESSOR_WARNED.compareAndSet(false, true)) {
+                AtmMemOpt.LOGGER.warn("[AtmMemOpt] owo ComponentMapImplAccessor unavailable; skipping DerivedComponentMap unwrap (version mismatch?).");
+            }
+            return;
+        }
         DataComponentMap currentBase = accessor.owo$getBaseComponents();
         if (currentBase instanceof DerivedComponentMap derived) {
             DataComponentMap originalBase = ((DerivedComponentMapAccessor) derived).atmmemopt$getBase();

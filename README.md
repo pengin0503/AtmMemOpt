@@ -40,6 +40,8 @@ AtmMemOpt reduces heap pressure and GC churn in a large modpack by interning / s
 
 Measured results (Phase 4, spark heap summary): the former top heap consumers (`DerivedComponentMap`, `ItemEnchantments`, `SpellContainer`, `CommonToken`) all dropped out of the top 100; JEI filter build 15.9 s → 0.8 s; ZGC major-GC interval 19.9 s → 105 s.
 
+- Phase 4 in-game test (2026-11-27): JEI filter build 15.9 s → **815 ms**; heap held at 8,476 MB / 12,000 MB.
+
 ## Commands
 
 Client commands (`/atmmemopt`):

@@ -139,13 +139,17 @@ public final class AtmMemOptServerCommands {
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M7 (VoxelShape): %s | doubleListHits=%d, discreteHits=%d, shapeHits=%d, cacheSize=%d/%d",
+                "M7 (VoxelShape): %s | doubleListHits=%d, discreteHits=%d, shapeHits=%d, cacheSize=%d/%d, capRej=%d, stale=%d, drained=%d, dlCapRej=%d",
                 formatModuleState("M7", AtmMemOptConfig.ENABLE_VOXEL_SHAPE_OPT.get()),
                 VoxelShapeOptHelper.getDoubleListHits(),
                 VoxelShapeOptHelper.getDiscreteHits(),
                 VoxelShapeOptHelper.getShapeHits(),
                 VoxelShapeOptHelper.getShapeCacheSize(),
-                VoxelShapeOptHelper.getCachedMaxShapeEntries()
+                VoxelShapeOptHelper.getCachedMaxShapeEntries(),
+                VoxelShapeOptHelper.getShapeCapRejections(),
+                VoxelShapeOptHelper.getShapeStaleRefs(),
+                VoxelShapeOptHelper.getShapeDrained(),
+                VoxelShapeOptHelper.getDoubleListCapRejections()
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
@@ -252,7 +256,8 @@ public final class AtmMemOptServerCommands {
         }
     }
 
-    private static final class IronsSpellbooksBridge {
+    /** Package-private so the client command class can reuse it instead of touching the helper directly. */
+    static final class IronsSpellbooksBridge {
         private static long getContainerHits() {
             return SpellContainerOptHelper.getContainerHits();
         }
@@ -269,7 +274,7 @@ public final class AtmMemOptServerCommands {
             return SpellContainerOptHelper.getGetOrCreateAvoided();
         }
 
-        private static int clearWeakCache() {
+        static int clearWeakCache() {
             return SpellContainerOptHelper.clearWeakCache();
         }
     }

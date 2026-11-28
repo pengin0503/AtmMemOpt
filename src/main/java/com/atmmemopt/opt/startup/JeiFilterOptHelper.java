@@ -7,7 +7,6 @@ import mezz.jei.common.search.PrefixInfo;
 import mezz.jei.common.search.PrefixedSearchable;
 import mezz.jei.gui.ingredients.IListElement;
 import mezz.jei.gui.ingredients.IListElementInfo;
-import mezz.jei.gui.search.ElementPrefixParser;
 import mezz.jei.gui.search.ElementSearchIndex;
 
 import java.util.ArrayList;
@@ -18,6 +17,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 
@@ -49,7 +49,7 @@ public final class JeiFilterOptHelper {
      * for lazy on-demand construction, or null if TOOLTIPS was built or permanently skipped.
      */
     public static List<IListElementInfo<?>> buildAllIndexesParallel(
-            ElementPrefixParser prefixParser,
+            JeiElementPrefixParserInvoker invoker,
             Collection<IListElementInfo<?>> elements,
             Map<PrefixInfo<IListElementInfo<?>, IListElement<?>>, PrefixedSearchable<IListElementInfo<?>, IListElement<?>>> targetMap,
             BiFunction<PrefixInfo<IListElementInfo<?>, IListElement<?>>, Collection<IListElementInfo<?>>, PrefixedSearchable<IListElementInfo<?>, IListElement<?>>> builderFn
@@ -60,7 +60,8 @@ public final class JeiFilterOptHelper {
         boolean lazyTooltips = !skipTooltips && AtmMemOptConfig.JEI_LAZY_TOOLTIP_INDEX.get();
 
         List<IListElementInfo<?>> snapshot = new ArrayList<>(elements);
-        JeiElementPrefixParserInvoker invoker = (JeiElementPrefixParserInvoker) prefixParser;
+        // The caller passes an already instanceof-checked invoker, so no unchecked cast
+        // to the invoker interface happens here (JEI version drift cannot CCE at runtime).
 
         int threads = Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors() - 1));
         ExecutorService pool = Executors.newFixedThreadPool(threads, r -> {
@@ -72,6 +73,7 @@ public final class JeiFilterOptHelper {
         Map<ElementSearchIndex, CompletableFuture<IndexResult>> futures = new EnumMap<>(ElementSearchIndex.class);
         Map<ElementSearchIndex, PrefixInfo<IListElementInfo<?>, IListElement<?>>> submittedPrefixes = new EnumMap<>(ElementSearchIndex.class);
         Map<ElementSearchIndex, Long> timingsMs = new EnumMap<>(ElementSearchIndex.class);
+        boolean aborted = false;
 
         try {
             for (ElementSearchIndex idx : allIndexes) {
@@ -119,8 +121,24 @@ public final class JeiFilterOptHelper {
                     timingsMs.put(idx, elapsed);
                 }
             }
+        } catch (RuntimeException | Error t) {
+            // An exception escaping the build loop (e.g. from getPrefixInfo) used to leave
+            // daemon workers running with discarded results. Drain them on the failure path.
+            aborted = true;
+            throw t;
         } finally {
-            pool.shutdown();
+            if (aborted) {
+                pool.shutdownNow();
+                try {
+                    if (!pool.awaitTermination(2, TimeUnit.SECONDS)) {
+                        AtmMemOpt.LOGGER.warn("[AtmMemOpt] JEI index worker pool did not terminate within 2s after failure.");
+                    }
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+            } else {
+                pool.shutdown();
+            }
         }
 
         long totalMs = (System.nanoTime() - totalStart) / 1_000_000L;
