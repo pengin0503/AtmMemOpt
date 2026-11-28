@@ -9,7 +9,7 @@
     "render.ParticleEngineMixin",
     "render.EntityRenderDispatcherMixin",
     "texture.SpriteContentsMixin",
-    "model.BakedQuadMixin",
+    "model.BakedQuadAccessor",
     "model.FaceBakeryMixin"
   ],
   "compatibilityLevel": "JAVA_21",

@@ -25,6 +25,9 @@ public final class AtmMemOptConfig {
     public static final ModConfigSpec.BooleanValue ENABLE_OWO_DERIVED_MAP_OPT;
     public static final ModConfigSpec.BooleanValue ENABLE_PATCHED_COMPONENT_MAP_OPT;
     public static final ModConfigSpec.BooleanValue ENABLE_IRONS_SPELL_CONTAINER_OPT;
+    public static final ModConfigSpec.IntValue SPELL_CONTAINER_STRONG_CACHE_MAX_ENTRIES;
+    public static final ModConfigSpec.IntValue SPELL_CONTAINER_CACHE_MAX_ENTRIES;
+    public static final ModConfigSpec.IntValue SPELL_CONTAINER_EMPTY_SLOT_MAX_LENGTH;
     public static final ModConfigSpec.BooleanValue ENABLE_IRIS_SHADER_CACHE_PURGE;
     public static final ModConfigSpec.IntValue IRIS_AUTO_PURGE_DELAY_SECONDS;
     public static final ModConfigSpec.BooleanValue ENABLE_NATIVE_IMAGE_DIAGNOSTICS;
@@ -32,6 +35,10 @@ public final class AtmMemOptConfig {
     public static final ModConfigSpec.IntValue ITEM_ENCHANTMENTS_MAX_CACHE_ENTRIES;
     public static final ModConfigSpec.BooleanValue ENABLE_VOXEL_SHAPE_OPT;
     public static final ModConfigSpec.IntValue VOXEL_SHAPE_MAX_CACHE_ENTRIES;
+    public static final ModConfigSpec.IntValue VOXEL_SHAPE_COORD_LIST_MAX_LENGTH;
+    public static final ModConfigSpec.IntValue VOXEL_SHAPE_DOUBLE_LIST_MAX_ENTRIES;
+    public static final ModConfigSpec.IntValue DISCRETE_SHAPE_MAX_CACHE_ENTRIES;
+    public static final ModConfigSpec.BooleanValue CUBE_SHAPE_INTERN_ENABLED;
     public static final ModConfigSpec.BooleanValue ENABLE_JEI_PARALLEL_FILTER;
     public static final ModConfigSpec.BooleanValue JEI_LAZY_TOOLTIP_INDEX;
     public static final ModConfigSpec.BooleanValue JEI_SKIP_TOOLTIP_INDEX;
@@ -52,14 +59,20 @@ public final class AtmMemOptConfig {
     public static final ModConfigSpec.ConfigValue<List<? extends String>> ENTITY_CULLING_WHITELIST;
     public static final ModConfigSpec.BooleanValue ENABLE_DATA_COMPONENT_PATCH_OPT;
     public static final ModConfigSpec.IntValue DATA_COMPONENT_PATCH_MAX_CACHE_ENTRIES;
+    public static final ModConfigSpec.IntValue DATA_COMPONENT_PATCH_MAX_KEY_PAYLOAD_BYTES;
     public static final ModConfigSpec.BooleanValue ENABLE_PALETTED_CONTAINER_OPT;
     public static final ModConfigSpec.BooleanValue ENABLE_RESOURCE_LOCATION_OPT;
     public static final ModConfigSpec.IntValue RESOURCE_LOCATION_MAX_CACHE_ENTRIES;
+    public static final ModConfigSpec.IntValue RESOURCE_LOCATION_NAMESPACE_MAX_ENTRIES;
+    public static final ModConfigSpec.BooleanValue RESOURCE_LOCATION_CONSERVATIVE_CACHE;
     public static final ModConfigSpec.BooleanValue ENABLE_CLIMATE_PARAMETER_OPT;
+    public static final ModConfigSpec.IntValue CLIMATE_PARAMETER_MAX_CACHE_ENTRIES;
+    public static final ModConfigSpec.IntValue CLIMATE_PARAMETER_ARRAY_MAX_CACHE_ENTRIES;
     public static final ModConfigSpec.BooleanValue ENABLE_SPRITE_MIPMAP_RELEASE;
     public static final ModConfigSpec.BooleanValue ENABLE_BAKED_QUAD_VERTEX_DEDUP;
     public static final ModConfigSpec.IntValue BAKED_QUAD_MAX_CACHE_ENTRIES;
     public static final ModConfigSpec.BooleanValue ENABLE_TAG_ENTRY_OPT;
+    public static final ModConfigSpec.IntValue TAG_ENTRY_MAX_CACHE_ENTRIES;
     public static final ModConfigSpec.BooleanValue ENABLE_MOB_AI_THROTTLING;
     public static final ModConfigSpec.IntValue MOB_AI_THROTTLE_DISTANCE;
     public static final ModConfigSpec.IntValue MOB_AI_THROTTLE_FAR_DISTANCE;
@@ -88,6 +101,18 @@ public final class AtmMemOptConfig {
                 .comment("Module 3: Share immutable empty/duplicate SpellContainer, SpellSlot, and SpellData instances in Iron's Spellbooks. Requires restart (mixin toggle read at startup).")
                 .define("enableIronsSpellContainerOpt", true);
 
+        SPELL_CONTAINER_STRONG_CACHE_MAX_ENTRIES = builder
+                .comment("Module 3: Maximum entries in each strong SpellData / SpellSlot / empty-container cache (formerly a hard-coded 8192). Applied on config reload.")
+                .defineInRange("spellContainerStrongCacheMaxEntries", 8192, 0, 262144);
+
+        SPELL_CONTAINER_CACHE_MAX_ENTRIES = builder
+                .comment("Module 3: Maximum entries in the weak SpellContainer instance cache (formerly a hard-coded 32768). Applied on config reload.")
+                .defineInRange("spellContainerCacheMaxEntries", 32768, 0, 262144);
+
+        SPELL_CONTAINER_EMPTY_SLOT_MAX_LENGTH = builder
+                .comment("Module 3: Longest SpellSlot[] for which an empty array is cached (formerly a hard-coded 64). Longer arrays are always allocated uncached at full length.")
+                .defineInRange("spellContainerEmptySlotMaxLength", 64, 1, 1024);
+
         ENABLE_IRIS_SHADER_CACHE_PURGE = builder
                 .comment("Module 4: Purge Iris / glsl_transformer AST and token caches after shader pack load and expose purge command. Requires restart (mixin toggle read at startup).")
                 .define("enableIrisShaderCachePurge", true);
@@ -115,6 +140,22 @@ public final class AtmMemOptConfig {
         VOXEL_SHAPE_MAX_CACHE_ENTRIES = builder
                 .comment("Module 7: Maximum entries in VoxelShape intern cache to avoid CHM/key bloat from rare shapes (0 disables VoxelShape body caching while keeping DoubleArrayList deduplication).")
                 .defineInRange("voxelShapeMaxCacheEntries", 32768, 0, 262144);
+
+        VOXEL_SHAPE_COORD_LIST_MAX_LENGTH = builder
+                .comment("Module 7: Coordinate DoubleList arrays longer than this are returned uncached (bounds the size of each cached double[] value).")
+                .defineInRange("voxelShapeCoordListMaxLength", 4096, 2, 262144);
+
+        VOXEL_SHAPE_DOUBLE_LIST_MAX_ENTRIES = builder
+                .comment("Module 7: Maximum entries in the strong DoubleArrayList coordinate cache (formerly a hard-coded 16384). This cache is also cleared on purge/reload.")
+                .defineInRange("voxelShapeDoubleListMaxEntries", 16384, 0, 262144);
+
+        DISCRETE_SHAPE_MAX_CACHE_ENTRIES = builder
+                .comment("Module 7: Maximum entries in the BitSetDiscreteVoxelShape weak cache (formerly a hard-coded 16384).")
+                .defineInRange("discreteShapeMaxCacheEntries", 16384, 0, 262144);
+
+        CUBE_SHAPE_INTERN_ENABLED = builder
+                .comment("Module 7: Also intern immutable CubeVoxelShape instances by their six bounds in a bounded weak cache (majority vanilla box()/join path).")
+                .define("cubeShapeInternEnabled", true);
 
         ENABLE_JEI_PARALLEL_FILTER = builder
                 .comment("Module 8a: Parallelize JEI ElementSearch index building (keeps TOOLTIPS/COLORS/CREATIVE_TABS on main thread). Requires restart (mixin toggle read at startup).")
@@ -225,6 +266,10 @@ public final class AtmMemOptConfig {
                 .comment("Module 10: Maximum entries in the DataComponentPatch weak intern cache (0 disables patch interning while keeping CoW map sharing).")
                 .defineInRange("dataComponentPatchMaxCacheEntries", 65536, 0, 262144);
 
+        DATA_COMPONENT_PATCH_MAX_KEY_PAYLOAD_BYTES = builder
+                .comment("Module 10: Maximum shallow estimated bytes of component payload retained by a cache key. Patches with larger (NBT/collection/map/string/unknown-heavy) payloads are not cached; the key payload is counted in status.")
+                .defineInRange("dataComponentPatchMaxKeyPayloadBytes", 4096, 0, 1048576);
+
         ENABLE_PALETTED_CONTAINER_OPT = builder
                 .comment("Module 11: Replace per-PalettedContainer ThreadingDetector (Semaphore + ReentrantLock) with a shared no-op detector to save ~25-30MB and lock overhead. Note: disables vanilla crash-on-concurrent-chunk-access detection; disable this if debugging chunk corruption with async chunk mods.")
                 .define("enablePalettedContainerOpt", true);
@@ -237,9 +282,25 @@ public final class AtmMemOptConfig {
                 .comment("Module 12: Maximum entries in the ResourceLocation weak intern cache (0 disables instance caching while keeping namespace string interning).")
                 .defineInRange("resourceLocationMaxCacheEntries", 131072, 0, 524288);
 
+        RESOURCE_LOCATION_NAMESPACE_MAX_ENTRIES = builder
+                .comment("Module 12: Maximum entries in the strong namespace String cache (formerly a hard-coded 4096). The cache is cleared on purge/reload.")
+                .defineInRange("resourceLocationNamespaceMaxEntries", 4096, 0, 262144);
+
+        RESOURCE_LOCATION_CONSERVATIVE_CACHE = builder
+                .comment("Module 12: When true, the effective ResourceLocation instance cache cap is HALVED at config refresh time (e.g. 131072 -> 65536); namespace interning is unaffected. Lower memory, fewer deduplications.")
+                .define("resourceLocationConservativeCache", false);
+
         ENABLE_CLIMATE_PARAMETER_OPT = builder
                 .comment("Module 13: Intern immutable Biome Climate.Parameter instances.")
                 .define("enableClimateParameterOpt", true);
+
+        CLIMATE_PARAMETER_MAX_CACHE_ENTRIES = builder
+                .comment("Module 13/18: Maximum entries in the Climate.Parameter weak cache (formerly a hard-coded 32768). Applied on config reload.")
+                .defineInRange("climateParameterMaxCacheEntries", 32768, 0, 262144);
+
+        CLIMATE_PARAMETER_ARRAY_MAX_CACHE_ENTRIES = builder
+                .comment("Module 13/18: Maximum entries in the Climate.Parameter[] weak cache (formerly a hard-coded 32768). Applied on config reload.")
+                .defineInRange("climateParameterArrayMaxCacheEntries", 32768, 0, 262144);
 
         ENABLE_SPRITE_MIPMAP_RELEASE = builder
                 .comment("Module 14: Release mipmap NativeImage levels (1..N) of static SpriteContents after GPU atlas upload (keeps originalImage level 0 intact).")
@@ -256,6 +317,10 @@ public final class AtmMemOptConfig {
         ENABLE_TAG_ENTRY_OPT = builder
                 .comment("Module 16: Intern immutable TagEntry instances across datapack tags.")
                 .define("enableTagEntryOpt", true);
+
+        TAG_ENTRY_MAX_CACHE_ENTRIES = builder
+                .comment("Module 16: Maximum entries in the TagEntry weak cache (formerly a hard-coded 65536). Applied on config reload.")
+                .defineInRange("tagEntryMaxCacheEntries", 65536, 0, 262144);
 
         ENABLE_MOB_AI_THROTTLING = builder
                 .comment("Module 20: Throttle Mob#serverAiStep() for distant non-critical mobs to reduce server/integrated TPS load.")

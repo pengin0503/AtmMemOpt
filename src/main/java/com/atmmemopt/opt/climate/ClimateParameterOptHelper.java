@@ -1,5 +1,6 @@
 package com.atmmemopt.opt.climate;
 
+import com.atmmemopt.config.AtmMemOptConfig;
 import net.minecraft.world.level.biome.Climate;
 
 import java.lang.ref.Reference;
@@ -14,9 +15,6 @@ import java.util.concurrent.atomic.LongAdder;
  * Climate.Parameter[] parameter-space arrays used in Climate.RTree nodes.
  */
 public final class ClimateParameterOptHelper {
-    private static final int MAX_CACHE_ENTRIES = 32768;
-    private static final int MAX_ARRAY_CACHE_ENTRIES = 32768;
-
     private static final ConcurrentHashMap<ParamKey, KeyedParamRef> CACHE = new ConcurrentHashMap<>(2048);
     private static final ReferenceQueue<Climate.Parameter> QUEUE = new ReferenceQueue<>();
     private static final ConcurrentHashMap<WeakParamArrayRef, WeakParamArrayRef> ARRAY_CACHE = new ConcurrentHashMap<>(4096);
@@ -24,8 +22,46 @@ public final class ClimateParameterOptHelper {
 
     private static final LongAdder INTERN_HITS = new LongAdder();
     private static final LongAdder ARRAY_HITS = new LongAdder();
+    private static final LongAdder EVICTIONS = new LongAdder();
+
+    private static volatile int cachedMaxEntries = 32768;
+    private static volatile int cachedMaxArrayEntries = 32768;
+    private static volatile boolean configLoaded = false;
 
     private ClimateParameterOptHelper() {
+    }
+
+    public static void refreshConfig() {
+        try {
+            cachedMaxEntries = AtmMemOptConfig.CLIMATE_PARAMETER_MAX_CACHE_ENTRIES.get();
+            cachedMaxArrayEntries = AtmMemOptConfig.CLIMATE_PARAMETER_ARRAY_MAX_CACHE_ENTRIES.get();
+            configLoaded = true;
+            drainQueue();
+            drainArrayQueue();
+            if (CACHE.size() > cachedMaxEntries) {
+                EVICTIONS.add(CACHE.size());
+                CACHE.clear();
+            }
+            if (ARRAY_CACHE.size() > cachedMaxArrayEntries) {
+                EVICTIONS.add(ARRAY_CACHE.size());
+                ARRAY_CACHE.clear();
+            }
+        } catch (IllegalStateException ignored) {
+        }
+    }
+
+    private static int getMaxEntries() {
+        if (!configLoaded) {
+            refreshConfig();
+        }
+        return cachedMaxEntries;
+    }
+
+    private static int getMaxArrayEntries() {
+        if (!configLoaded) {
+            refreshConfig();
+        }
+        return cachedMaxArrayEntries;
     }
 
     public static Climate.Parameter intern(Climate.Parameter param) {
@@ -46,7 +82,7 @@ public final class ClimateParameterOptHelper {
             }
         }
 
-        if (CACHE.size() >= MAX_CACHE_ENTRIES) {
+        if (CACHE.size() >= getMaxEntries()) {
             return param;
         }
 
@@ -62,7 +98,7 @@ public final class ClimateParameterOptHelper {
                     return existingRef;
                 }
             }
-            if (CACHE.size() >= MAX_CACHE_ENTRIES) {
+            if (CACHE.size() >= getMaxEntries()) {
                 resultHolder[0] = param;
                 return null;
             }
@@ -95,7 +131,7 @@ public final class ClimateParameterOptHelper {
             }
         }
 
-        if (ARRAY_CACHE.size() >= MAX_ARRAY_CACHE_ENTRIES) {
+        if (ARRAY_CACHE.size() >= getMaxArrayEntries()) {
             return space;
         }
 
@@ -112,7 +148,7 @@ public final class ClimateParameterOptHelper {
                     return existingRef;
                 }
             }
-            if (ARRAY_CACHE.size() >= MAX_ARRAY_CACHE_ENTRIES) {
+            if (ARRAY_CACHE.size() >= getMaxArrayEntries()) {
                 resultHolder[0] = space;
                 return null;
             }
@@ -167,6 +203,18 @@ public final class ClimateParameterOptHelper {
     public static int getArrayCacheSize() {
         drainArrayQueue();
         return ARRAY_CACHE.size();
+    }
+
+    public static int getCachedMaxEntries() {
+        return getMaxEntries();
+    }
+
+    public static int getCachedArrayMaxEntries() {
+        return getMaxArrayEntries();
+    }
+
+    public static long getEvictions() {
+        return EVICTIONS.sum();
     }
 
     private record ParamKey(long min, long max) {

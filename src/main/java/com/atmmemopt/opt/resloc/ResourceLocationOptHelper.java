@@ -14,17 +14,22 @@ import java.util.concurrent.atomic.LongAdder;
  * and deduplicates identical ResourceLocation instances within a bounded weak cache.
  */
 public final class ResourceLocationOptHelper {
-    private static final int MAX_NAMESPACE_CACHE = 4096;
-
     private static final ConcurrentHashMap<String, String> NAMESPACE_CACHE = new ConcurrentHashMap<>(512);
     private static final ConcurrentHashMap<ResLocKey, KeyedResLocRef> CACHE = new ConcurrentHashMap<>(16384);
     private static final ReferenceQueue<ResourceLocation> QUEUE = new ReferenceQueue<>();
 
     private static final LongAdder NAMESPACE_HITS = new LongAdder();
     private static final LongAdder INSTANCE_HITS = new LongAdder();
+    private static final LongAdder INSTANCE_EVICTIONS = new LongAdder();
+    private static final LongAdder NAMESPACE_EVICTIONS = new LongAdder();
+
+    /** Reusable lookup key so cache hits do not allocate a ResLocKey per call. */
+    private static final ThreadLocal<LookupKey> LOOKUP_KEY = ThreadLocal.withInitial(LookupKey::new);
 
     private static volatile int cachedMaxEntries = 131072;
+    private static volatile int cachedMaxNamespaceEntries = 4096;
     private static volatile boolean configLoaded = false;
+    private static volatile boolean conservativeCache = false;
 
     static {
         NAMESPACE_CACHE.put(ResourceLocation.DEFAULT_NAMESPACE, ResourceLocation.DEFAULT_NAMESPACE);
@@ -36,8 +41,21 @@ public final class ResourceLocationOptHelper {
 
     public static void refreshConfig() {
         try {
-            cachedMaxEntries = AtmMemOptConfig.RESOURCE_LOCATION_MAX_CACHE_ENTRIES.get();
+            conservativeCache = AtmMemOptConfig.RESOURCE_LOCATION_CONSERVATIVE_CACHE.get();
+            int configured = AtmMemOptConfig.RESOURCE_LOCATION_MAX_CACHE_ENTRIES.get();
+            // Conservative mode halves the effective instance-cache cap on every refresh.
+            cachedMaxEntries = conservativeCache ? configured / 2 : configured;
+            cachedMaxNamespaceEntries = AtmMemOptConfig.RESOURCE_LOCATION_NAMESPACE_MAX_ENTRIES.get();
             configLoaded = true;
+            drainQueue();
+            if (CACHE.size() > cachedMaxEntries) {
+                INSTANCE_EVICTIONS.add(CACHE.size());
+                CACHE.clear();
+            }
+            if (NAMESPACE_CACHE.size() > cachedMaxNamespaceEntries) {
+                NAMESPACE_EVICTIONS.add(NAMESPACE_CACHE.size());
+                NAMESPACE_CACHE.clear();
+            }
         } catch (IllegalStateException ignored) {
         }
     }
@@ -47,6 +65,13 @@ public final class ResourceLocationOptHelper {
             refreshConfig();
         }
         return cachedMaxEntries;
+    }
+
+    private static int getMaxNamespaceEntries() {
+        if (!configLoaded) {
+            refreshConfig();
+        }
+        return cachedMaxNamespaceEntries;
     }
 
     public static String internNamespace(String namespace) {
@@ -67,7 +92,7 @@ public final class ResourceLocationOptHelper {
             }
             return existing;
         }
-        if (NAMESPACE_CACHE.size() < MAX_NAMESPACE_CACHE) {
+        if (NAMESPACE_CACHE.size() < getMaxNamespaceEntries()) {
             String prev = NAMESPACE_CACHE.putIfAbsent(namespace, namespace);
             if (prev != null) {
                 NAMESPACE_HITS.increment();
@@ -88,8 +113,11 @@ public final class ResourceLocationOptHelper {
 
         drainQueue();
 
-        ResLocKey key = new ResLocKey(rl.getNamespace(), rl.getPath());
-        KeyedResLocRef fastRef = CACHE.get(key);
+        // Probe with a thread-local mutable key first; the ResLocKey + result holder are
+        // only allocated on the miss/insert path.
+        String namespace = rl.getNamespace();
+        String path = rl.getPath();
+        KeyedResLocRef fastRef = CACHE.get(LOOKUP_KEY.get().set(namespace, path));
         if (fastRef != null) {
             ResourceLocation cached = fastRef.get();
             if (cached != null) {
@@ -104,6 +132,7 @@ public final class ResourceLocationOptHelper {
             return rl;
         }
 
+        ResLocKey key = new ResLocKey(namespace, path);
         final ResourceLocation[] resultHolder = new ResourceLocation[1];
         CACHE.compute(key, (k, existingRef) -> {
             if (existingRef != null) {
@@ -127,8 +156,9 @@ public final class ResourceLocationOptHelper {
     }
 
     public static int clearWeakCache() {
-        int removed = CACHE.size();
+        int removed = CACHE.size() + NAMESPACE_CACHE.size();
         CACHE.clear();
+        NAMESPACE_CACHE.clear();
         while (QUEUE.poll() != null) {
             // drain
         }
@@ -156,8 +186,24 @@ public final class ResourceLocationOptHelper {
         return CACHE.size();
     }
 
+    public static int getNamespaceCacheSize() {
+        return NAMESPACE_CACHE.size();
+    }
+
     public static int getCachedMaxEntries() {
         return getMaxEntries();
+    }
+
+    public static int getCachedMaxNamespaceEntries() {
+        return getMaxNamespaceEntries();
+    }
+
+    public static long getInstanceEvictions() {
+        return INSTANCE_EVICTIONS.sum();
+    }
+
+    public static long getNamespaceEvictions() {
+        return NAMESPACE_EVICTIONS.sum();
     }
 
     private static final class KeyedResLocRef extends WeakReference<ResourceLocation> {
@@ -192,6 +238,50 @@ public final class ResourceLocationOptHelper {
             return this.hash == other.hash
                     && (this.namespace == other.namespace || this.namespace.equals(other.namespace))
                     && (this.path == other.path || this.path.equals(other.path));
+        }
+    }
+
+    /**
+     * Mutable, thread-local CHM lookup key. Only ever used for get(); insertion always
+     * allocates a fresh immutable ResLocKey so the map never sees a mutated key.
+     */
+    private static final class LookupKey {
+        private String namespace;
+        private String path;
+        private int hash;
+
+        LookupKey set(String namespace, String path) {
+            this.namespace = namespace;
+            this.path = path;
+            this.hash = 31 * namespace.hashCode() + path.hashCode();
+            return this;
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            String otherNamespace;
+            String otherPath;
+            int otherHash;
+            if (obj instanceof LookupKey other) {
+                otherNamespace = other.namespace;
+                otherPath = other.path;
+                otherHash = other.hash;
+            } else if (obj instanceof ResLocKey other) {
+                otherNamespace = other.namespace;
+                otherPath = other.path;
+                otherHash = other.hash;
+            } else {
+                return false;
+            }
+            return this.hash == otherHash
+                    && (this.namespace == otherNamespace || this.namespace.equals(otherNamespace))
+                    && (this.path == otherPath || this.path.equals(otherPath));
         }
     }
 }

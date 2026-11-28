@@ -29,6 +29,7 @@ public final class ItemEnchantmentsOptHelper {
 
     private static final LongAdder EMPTY_UNIFIED = new LongAdder();
     private static final LongAdder INTERN_HITS = new LongAdder();
+    private static final LongAdder EVICTIONS = new LongAdder();
 
     private static volatile int cachedMaxEntries = 32768;
     private static volatile boolean configLoaded = false;
@@ -40,6 +41,11 @@ public final class ItemEnchantmentsOptHelper {
         try {
             cachedMaxEntries = AtmMemOptConfig.ITEM_ENCHANTMENTS_MAX_CACHE_ENTRIES.get();
             configLoaded = true;
+            drainQueue();
+            if (CACHE.size() > cachedMaxEntries) {
+                EVICTIONS.add(CACHE.size());
+                CACHE.clear();
+            }
         } catch (IllegalStateException ignored) {
         }
     }
@@ -165,6 +171,10 @@ public final class ItemEnchantmentsOptHelper {
 
     public static long getTotalHits() {
         return EMPTY_UNIFIED.sum() + INTERN_HITS.sum();
+    }
+
+    public static long getEvictions() {
+        return EVICTIONS.sum();
     }
 
     public static int getCacheSize() {

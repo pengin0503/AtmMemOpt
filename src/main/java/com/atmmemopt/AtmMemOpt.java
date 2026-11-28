@@ -52,6 +52,10 @@ public class AtmMemOpt {
 
         NeoForge.EVENT_BUS.addListener((ServerStoppedEvent event) -> clearWorldScopedCaches());
         NeoForge.EVENT_BUS.addListener((TagsUpdatedEvent event) -> {
+            // M3 joins M6/M10/M16 here: Iron's registry objects are replaced on tag reload.
+            if (ModList.get().isLoaded("irons_spellbooks")) {
+                IronsCacheBridge.clearWeakCache();
+            }
             ItemEnchantmentsOptHelper.clearCache();
             DataComponentPatchOptHelper.clearCache();
             TagEntryOptHelper.clearCache();
@@ -82,6 +86,11 @@ public class AtmMemOpt {
         VoxelShapeOptHelper.refreshConfig();
         DataComponentPatchOptHelper.refreshConfig();
         ResourceLocationOptHelper.refreshConfig();
+        ClimateParameterOptHelper.refreshConfig();
+        TagEntryOptHelper.refreshConfig();
+        if (ModList.get().isLoaded("irons_spellbooks")) {
+            IronsCacheBridge.refreshConfig();
+        }
         MobAiThrottleHelper.refreshConfig();
         EntityMergeOptHelper.refreshConfig();
         if (FMLEnvironment.dist == Dist.CLIENT) {
@@ -92,6 +101,10 @@ public class AtmMemOpt {
     private static final class IronsCacheBridge {
         private static void clearWeakCache() {
             SpellContainerOptHelper.clearWeakCache();
+        }
+
+        private static void refreshConfig() {
+            SpellContainerOptHelper.refreshConfig();
         }
     }
 

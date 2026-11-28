@@ -15,7 +15,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Module 15/17: Interns identical BakedQuad instances returned by FaceBakery#bakeQuad.
+ * Module 15/17: Interns BakedQuad instances (and their vertex int[] arrays) at the RETURN of
+ * FaceBakery#bakeQuad. NeoForge mutates the freshly constructed quad in place with
+ * QuadTransformers.processInPlace *inside* bakeQuad, so the canonical array must not be
+ * published from the BakedQuad constructor; by RETURN all baking mutations are complete.
  */
 @Mixin(FaceBakery.class)
 public class FaceBakeryMixin {
@@ -31,6 +34,6 @@ public class FaceBakeryMixin {
             boolean shade,
             CallbackInfoReturnable<BakedQuad> cir
     ) {
-        cir.setReturnValue(BakedQuadOptHelper.internQuad(cir.getReturnValue()));
+        cir.setReturnValue(BakedQuadOptHelper.internPostBake(cir.getReturnValue()));
     }
 }

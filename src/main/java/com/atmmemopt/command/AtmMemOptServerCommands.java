@@ -120,46 +120,76 @@ public final class AtmMemOptServerCommands {
 
         boolean m3Cfg = ModList.get().isLoaded("irons_spellbooks") && AtmMemOptConfig.ENABLE_IRONS_SPELL_CONTAINER_OPT.get();
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M3 (Iron's SpellContainer): %s | containerHits=%d, slotHits=%d, dataHits=%d, getOrCreateSaved=%d",
+                "M3 (Iron's SpellContainer): %s | containerHits=%d, slotHits=%d, dataHits=%d, getOrCreateSaved=%d"
+                        + ", caches(data=%d/%d, slot=%d/%d, emptyContainer=%d/%d, emptySlotArrays=%d/%d, container=%d/%d, evicted=%d)",
                 formatModuleState("M3", m3Cfg),
                 ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getContainerHits() : 0L,
                 ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getSpellSlotHits() : 0L,
                 ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getSpellDataHits() : 0L,
-                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getGetOrCreateAvoided() : 0L
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getGetOrCreateAvoided() : 0L,
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getSpellDataCacheSize() : 0,
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getCachedMaxStrongEntries() : 0,
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getSpellSlotCacheSize() : 0,
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getCachedMaxStrongEntries() : 0,
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getEmptyContainerCacheSize() : 0,
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getCachedMaxStrongEntries() : 0,
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getEmptySlotArraysSize() : 0,
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getCachedMaxEmptySlotLength() : 0,
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getContainerCacheSize() : 0,
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getCachedMaxContainerEntries() : 0,
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getEvictions() : 0L
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M6 (ItemEnchantments): %s | totalHits=%d (emptyUnified=%d, internHits=%d, cache=%d/%d)",
+                "M6 (ItemEnchantments): %s | totalHits=%d (emptyUnified=%d, internHits=%d, cache=%d/%d, evicted=%d)",
                 formatModuleState("M6", AtmMemOptConfig.ENABLE_ITEM_ENCHANTMENTS_OPT.get()),
                 ItemEnchantmentsOptHelper.getTotalHits(),
                 ItemEnchantmentsOptHelper.getEmptyUnified(),
                 ItemEnchantmentsOptHelper.getInternHits(),
                 ItemEnchantmentsOptHelper.getCacheSize(),
-                ItemEnchantmentsOptHelper.getCachedMaxEntries()
+                ItemEnchantmentsOptHelper.getCachedMaxEntries(),
+                ItemEnchantmentsOptHelper.getEvictions()
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M7 (VoxelShape): %s | doubleListHits=%d, discreteHits=%d, shapeHits=%d, cacheSize=%d/%d, capRej=%d, stale=%d, drained=%d, dlCapRej=%d",
+                "M7 (VoxelShape): %s | doubleListHits=%d, discreteHits=%d, shapeHits=%d, cacheSize=%d/%d"
+                        + ", doubleListSize=%d/%d, discreteSize=%d/%d, cubeSize=%d, cubeInternHits=%d, cubeSkipped=%d"
+                        + ", capRej=%d, stale=%d, drained=%d, dlCapRej=%d, longCoordSkip=%d, discreteCapRej=%d, discreteProbeHits=%d, evicted=%d",
                 formatModuleState("M7", AtmMemOptConfig.ENABLE_VOXEL_SHAPE_OPT.get()),
                 VoxelShapeOptHelper.getDoubleListHits(),
                 VoxelShapeOptHelper.getDiscreteHits(),
                 VoxelShapeOptHelper.getShapeHits(),
                 VoxelShapeOptHelper.getShapeCacheSize(),
                 VoxelShapeOptHelper.getCachedMaxShapeEntries(),
+                VoxelShapeOptHelper.getDoubleListCacheSize(),
+                VoxelShapeOptHelper.getCachedMaxDoubleListEntries(),
+                VoxelShapeOptHelper.getDiscreteCacheSize(),
+                VoxelShapeOptHelper.getCachedMaxDiscreteEntries(),
+                VoxelShapeOptHelper.getCubeCacheSize(),
+                VoxelShapeOptHelper.getCubeInternHits(),
+                VoxelShapeOptHelper.getCubeSkipped(),
                 VoxelShapeOptHelper.getShapeCapRejections(),
                 VoxelShapeOptHelper.getShapeStaleRefs(),
                 VoxelShapeOptHelper.getShapeDrained(),
-                VoxelShapeOptHelper.getDoubleListCapRejections()
+                VoxelShapeOptHelper.getDoubleListCapRejections(),
+                VoxelShapeOptHelper.getLongCoordListSkips(),
+                VoxelShapeOptHelper.getDiscreteCapRejections(),
+                VoxelShapeOptHelper.getDiscreteProbeHits(),
+                VoxelShapeOptHelper.getEvictions()
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M10 (DataComponentPatch): %s | internHits=%d, mapShares=%d, emptyUnified=%d, cacheSize=%d/%d",
+                "M10 (DataComponentPatch): %s | internHits=%d, mapShares=%d, emptyUnified=%d, cacheSize=%d/%d"
+                        + ", skippedHeavy=%d, keyPayloadBytes=%d, evicted=%d",
                 formatModuleState("M10", AtmMemOptConfig.ENABLE_DATA_COMPONENT_PATCH_OPT.get()),
                 DataComponentPatchOptHelper.getInternHits(),
                 DataComponentPatchOptHelper.getMapShares(),
                 DataComponentPatchOptHelper.getEmptyUnified(),
                 DataComponentPatchOptHelper.getCacheSize(),
-                DataComponentPatchOptHelper.getCachedMaxEntries()
+                DataComponentPatchOptHelper.getCachedMaxEntries(),
+                DataComponentPatchOptHelper.getSkippedHeavyKeys(),
+                DataComponentPatchOptHelper.getEstimatedKeyBytes(),
+                DataComponentPatchOptHelper.getEvictions()
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
@@ -169,28 +199,37 @@ public final class AtmMemOptServerCommands {
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M12 (ResourceLocation): %s | nsHits=%d, instHits=%d, cacheSize=%d/%d",
+                "M12 (ResourceLocation): %s | nsHits=%d, instHits=%d, cacheSize=%d/%d, namespaceSize=%d/%d, instEvicted=%d, nsEvicted=%d",
                 formatModuleState("M12", AtmMemOptConfig.ENABLE_RESOURCE_LOCATION_OPT.get()),
                 ResourceLocationOptHelper.getNamespaceHits(),
                 ResourceLocationOptHelper.getInstanceHits(),
                 ResourceLocationOptHelper.getCacheSize(),
-                ResourceLocationOptHelper.getCachedMaxEntries()
+                ResourceLocationOptHelper.getCachedMaxEntries(),
+                ResourceLocationOptHelper.getNamespaceCacheSize(),
+                ResourceLocationOptHelper.getCachedMaxNamespaceEntries(),
+                ResourceLocationOptHelper.getInstanceEvictions(),
+                ResourceLocationOptHelper.getNamespaceEvictions()
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M13/18 (Climate.Parameter): %s | paramHits=%d, arrayHits=%d, cache=%d/%d",
+                "M13/18 (Climate.Parameter): %s | paramHits=%d, arrayHits=%d, param=%d/%d, array=%d/%d, evicted=%d",
                 formatModuleState("M13", AtmMemOptConfig.ENABLE_CLIMATE_PARAMETER_OPT.get()),
                 ClimateParameterOptHelper.getInternHits(),
                 ClimateParameterOptHelper.getArrayHits(),
                 ClimateParameterOptHelper.getCacheSize(),
-                ClimateParameterOptHelper.getArrayCacheSize()
+                ClimateParameterOptHelper.getCachedMaxEntries(),
+                ClimateParameterOptHelper.getArrayCacheSize(),
+                ClimateParameterOptHelper.getCachedArrayMaxEntries(),
+                ClimateParameterOptHelper.getEvictions()
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M16 (TagEntry): %s | internHits=%d, cacheSize=%d",
+                "M16 (TagEntry): %s | internHits=%d, cacheSize=%d/%d, evicted=%d",
                 formatModuleState("M16", AtmMemOptConfig.ENABLE_TAG_ENTRY_OPT.get()),
                 TagEntryOptHelper.getInternHits(),
-                TagEntryOptHelper.getCacheSize()
+                TagEntryOptHelper.getCacheSize(),
+                TagEntryOptHelper.getCachedMaxEntries(),
+                TagEntryOptHelper.getEvictions()
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
@@ -276,6 +315,42 @@ public final class AtmMemOptServerCommands {
 
         static int clearWeakCache() {
             return SpellContainerOptHelper.clearWeakCache();
+        }
+
+        static int getSpellDataCacheSize() {
+            return SpellContainerOptHelper.getSpellDataCacheSize();
+        }
+
+        static int getSpellSlotCacheSize() {
+            return SpellContainerOptHelper.getSpellSlotCacheSize();
+        }
+
+        static int getEmptyContainerCacheSize() {
+            return SpellContainerOptHelper.getEmptyContainerCacheSize();
+        }
+
+        static int getEmptySlotArraysSize() {
+            return SpellContainerOptHelper.getEmptySlotArraysSize();
+        }
+
+        static int getContainerCacheSize() {
+            return SpellContainerOptHelper.getContainerCacheSize();
+        }
+
+        static int getCachedMaxStrongEntries() {
+            return SpellContainerOptHelper.getCachedMaxStrongEntries();
+        }
+
+        static int getCachedMaxContainerEntries() {
+            return SpellContainerOptHelper.getCachedMaxContainerEntries();
+        }
+
+        static int getCachedMaxEmptySlotLength() {
+            return SpellContainerOptHelper.getCachedMaxEmptySlotLength();
+        }
+
+        static long getEvictions() {
+            return SpellContainerOptHelper.getEvictions();
         }
     }
 }

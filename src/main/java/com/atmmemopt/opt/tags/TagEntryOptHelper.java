@@ -1,5 +1,6 @@
 package com.atmmemopt.opt.tags;
 
+import com.atmmemopt.config.AtmMemOptConfig;
 import com.atmmemopt.mixin.tags.TagEntryAccessor;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagEntry;
@@ -14,13 +15,35 @@ import java.util.concurrent.atomic.LongAdder;
  * Module 16: Interns immutable TagEntry(id, tag, required) instances across datapack tags.
  */
 public final class TagEntryOptHelper {
-    private static final int MAX_CACHE_ENTRIES = 65536;
-
     private static final ConcurrentHashMap<TagEntryKey, KeyedTagEntryRef> CACHE = new ConcurrentHashMap<>(4096);
     private static final ReferenceQueue<TagEntry> QUEUE = new ReferenceQueue<>();
     private static final LongAdder INTERN_HITS = new LongAdder();
+    private static final LongAdder EVICTIONS = new LongAdder();
+
+    private static volatile int cachedMaxEntries = 65536;
+    private static volatile boolean configLoaded = false;
 
     private TagEntryOptHelper() {
+    }
+
+    public static void refreshConfig() {
+        try {
+            cachedMaxEntries = AtmMemOptConfig.TAG_ENTRY_MAX_CACHE_ENTRIES.get();
+            configLoaded = true;
+            drainQueue();
+            if (CACHE.size() > cachedMaxEntries) {
+                EVICTIONS.add(CACHE.size());
+                CACHE.clear();
+            }
+        } catch (IllegalStateException ignored) {
+        }
+    }
+
+    private static int getMaxEntries() {
+        if (!configLoaded) {
+            refreshConfig();
+        }
+        return cachedMaxEntries;
     }
 
     public static TagEntry intern(TagEntry entry) {
@@ -47,7 +70,7 @@ public final class TagEntryOptHelper {
             }
         }
 
-        if (CACHE.size() >= MAX_CACHE_ENTRIES) {
+        if (CACHE.size() >= getMaxEntries()) {
             return entry;
         }
 
@@ -63,7 +86,7 @@ public final class TagEntryOptHelper {
                     return existingRef;
                 }
             }
-            if (CACHE.size() >= MAX_CACHE_ENTRIES) {
+            if (CACHE.size() >= getMaxEntries()) {
                 resultHolder[0] = entry;
                 return null;
             }
@@ -97,6 +120,14 @@ public final class TagEntryOptHelper {
     public static int getCacheSize() {
         drainQueue();
         return CACHE.size();
+    }
+
+    public static int getCachedMaxEntries() {
+        return getMaxEntries();
+    }
+
+    public static long getEvictions() {
+        return EVICTIONS.sum();
     }
 
     private record TagEntryKey(ResourceLocation id, boolean tag, boolean required) {

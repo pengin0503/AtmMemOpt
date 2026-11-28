@@ -133,14 +133,16 @@ public final class AtmMemOptCommands {
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M15/17 (BakedQuad): %s | vertHits=%d, quadHits=%d, estSaved=%s, cache=%d/%d (quad=%d)",
+                "M15/17 (BakedQuad): %s | vertHits=%d, quadHits=%d, estSaved=%s, cache=%d/%d (quad=%d), postBake=%d, evicted=%d",
                 AtmMemOptServerCommands.formatModuleState("M15", AtmMemOptConfig.ENABLE_BAKED_QUAD_VERTEX_DEDUP.get()),
                 BakedQuadOptHelper.getVertexHits(),
                 BakedQuadOptHelper.getQuadHits(),
                 fmtMB(BakedQuadOptHelper.getEstimatedBytesSaved()),
                 BakedQuadOptHelper.getCacheSize(),
                 BakedQuadOptHelper.getCachedMaxEntries(),
-                BakedQuadOptHelper.getQuadCacheSize()
+                BakedQuadOptHelper.getQuadCacheSize(),
+                BakedQuadOptHelper.getInternedPostBake(),
+                BakedQuadOptHelper.getEvictions()
         )).withStyle(ChatFormatting.GREEN));
 
         AtmMemOpt.LOGGER.info("\n{}", logBuf);
