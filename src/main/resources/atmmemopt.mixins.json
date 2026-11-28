@@ -58,7 +58,6 @@
     "tick.ExperienceOrbMergeMixin",
     "text.StyleAccessor",
     "text.StyleMixin",
-    "text.StyleSerializerMixin",
     "keys.TagKeyMixin",
     "keys.ResourceKeyMixin"
   ],

@@ -94,7 +94,7 @@ public final class StyleOptHelper {
         }
         drainQueue();
 
-        PlainStyleKey key = new PlainStyleKey(color, colorValue, bold, italic, underlined, strikethrough, obfuscated);
+        PlainStyleKey key = new PlainStyleKey(colorValue, color != null, bold, italic, underlined, strikethrough, obfuscated);
         KeyedStyleRef fastRef = CACHE.get(key);
         if (fastRef != null) {
             Style cached = fastRef.get();
@@ -169,7 +169,7 @@ public final class StyleOptHelper {
         return getMaxEntries();
     }
 
-    private record PlainStyleKey(TextColor color, int colorValue, boolean bold, boolean italic,
+    private record PlainStyleKey(int colorValue, boolean hasColor, boolean bold, boolean italic,
                                  boolean underlined, boolean strikethrough, boolean obfuscated) {
     }
 

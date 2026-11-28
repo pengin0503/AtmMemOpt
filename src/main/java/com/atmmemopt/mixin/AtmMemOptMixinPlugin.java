@@ -170,7 +170,7 @@ public class AtmMemOptMixinPlugin implements IMixinConfigPlugin {
             return recordAndReturn("M21", AtmMemOptConfig.getEarlyBoolean("enableEntityMergeOpt", true));
         }
 
-        // Module 22: plain Style interning (codec + creation paths, never setStyle)
+        // Module 22: plain Style interning (Style#create factory path only, never setStyle)
         if (relative.startsWith("text.")) {
             return recordAndReturn("M22", AtmMemOptConfig.getEarlyBoolean("enablePlainStyleInterning", true));
         }

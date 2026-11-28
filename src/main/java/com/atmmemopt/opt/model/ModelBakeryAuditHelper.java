@@ -86,13 +86,26 @@ public final class ModelBakeryAuditHelper {
         long entries = 0L;
         for (String name : STAGING_FIELDS) {
             try {
-                Field field = bakery.getClass().getDeclaredField(name);
+                Field field = null;
+                for (Class<?> type = bakery.getClass(); type != null; type = type.getSuperclass()) {
+                    try {
+                        field = type.getDeclaredField(name);
+                        break;
+                    } catch (NoSuchFieldException ignored) {
+                        // Field may be declared on a superclass; keep walking up the hierarchy.
+                    }
+                }
+                if (field == null) {
+                    continue;
+                }
                 field.setAccessible(true);
                 Object value = field.get(bakery);
                 if (value == null) {
                     continue;
                 }
                 Method size = value.getClass().getMethod("size");
+                // The map class may be non-public (e.g. Collections.unmodifiableMap).
+                size.setAccessible(true);
                 int count = ((Number) size.invoke(value)).intValue();
                 if (count > 0) {
                     mapsWithEntries++;

@@ -390,7 +390,7 @@ public final class AtmMemOptConfig {
                 .defineInRange("xpMergeRadius", 1.5D, 0.5D, 6.0D);
 
         ENABLE_PLAIN_STYLE_INTERNING = builder
-                .comment("Module 22: Intern plain Style instances (no click/hover event, font or insertion) from Style codec/creation paths. Exact net.minecraft.network.chat.Style class only. Requires restart (mixin toggle read at startup).")
+                .comment("Module 22: Intern plain Style instances (no click/hover event, font or insertion) from the Style#create factory path. Exact net.minecraft.network.chat.Style class only. Requires restart (mixin toggle read at startup).")
                 .define("enablePlainStyleInterning", true);
 
         PLAIN_STYLE_MAX_CACHE_ENTRIES = builder
@@ -398,7 +398,7 @@ public final class AtmMemOptConfig {
                 .defineInRange("plainStyleMaxCacheEntries", 65536, 0, 262144);
 
         ENABLE_TAG_AND_RESOURCE_KEY_INTERNING = builder
-                .comment("Module 23: Intern TagKey / ResourceKey instances from their static factories and codecs using canonical (registry, location) keys. Exact classes only; no dynamic-registry Holder objects are used as keys. Requires restart (mixin toggle read at startup).")
+                .comment("Module 23: Intern TagKey / ResourceKey instances from their static factories using canonical (registry, location) keys. Exact classes only; no dynamic-registry Holder objects are used as keys. Requires restart (mixin toggle read at startup).")
                 .define("enableTagAndResourceKeyInterning", true);
 
         TAG_KEY_MAX_CACHE_ENTRIES = builder

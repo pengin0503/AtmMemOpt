@@ -9,7 +9,6 @@ import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.npc.AbstractVillager;
 import net.minecraft.world.entity.raid.Raider;
-import net.minecraft.world.phys.AABB;
 
 import java.util.List;
 import java.util.concurrent.atomic.LongAdder;
@@ -112,18 +111,13 @@ public final class MobAiThrottleHelper {
             return false;
         }
 
-        // Distance-limited spatial lookup instead of scanning every player in the level for
-        // every mob. +2 blocks of padding covers the player's bounding box so no player within
-        // cachedFarDist can be missed by the section-based entity query.
+        List<ServerPlayer> players = serverLevel.players();
         double mx = mob.getX();
         double my = mob.getY();
         double mz = mob.getZ();
-        double reach = cachedFarDist + 2.0D;
-        AABB searchBox = new AABB(mx - reach, my - reach, mz - reach, mx + reach, my + reach, mz + reach);
-        List<ServerPlayer> nearby = serverLevel.getEntitiesOfClass(ServerPlayer.class, searchBox);
         double minDistSq = Double.MAX_VALUE;
-        for (int i = 0, n = nearby.size(); i < n; i++) {
-            ServerPlayer p = nearby.get(i);
+        for (int i = 0, n = players.size(); i < n; i++) {
+            ServerPlayer p = players.get(i);
             if (p.isSpectator()) {
                 continue;
             }

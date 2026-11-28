@@ -10,7 +10,6 @@ import net.minecraft.tags.TagKey;
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 
@@ -224,33 +223,9 @@ public final class KeyInternOptHelper {
     }
 
     private record TagKeyCacheKey(ResourceKey<?> registry, ResourceLocation location) {
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) return true;
-            if (!(obj instanceof TagKeyCacheKey other)) return false;
-            // Identity semantics for the registry key (vanilla ResourceKey uses identity equals).
-            return this.registry == other.registry && Objects.equals(this.location, other.location);
-        }
-
-        @Override
-        public int hashCode() {
-            return 31 * System.identityHashCode(registry) + location.hashCode();
-        }
     }
 
     private record ResourceKeyCacheKey(ResourceLocation registryName, ResourceLocation location) {
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) return true;
-            if (!(obj instanceof ResourceKeyCacheKey other)) return false;
-            return Objects.equals(this.registryName, other.registryName)
-                    && Objects.equals(this.location, other.location);
-        }
-
-        @Override
-        public int hashCode() {
-            return 31 * registryName.hashCode() + location.hashCode();
-        }
     }
 
     private static final class KeyedTagKeyRef extends WeakReference<TagKey<?>> {

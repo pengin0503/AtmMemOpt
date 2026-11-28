@@ -37,7 +37,7 @@ AtmMemOpt reduces heap pressure and GC churn in a large modpack by interning / s
 | M16 | Vanilla (`TagEntry`) | Interns immutable `TagEntry` instances across datapack tags |
 | M20 | Vanilla (`Mob`) | Throttles `serverAiStep()` for distant non-critical mobs (1/2 beyond 48 blocks, 1/4 beyond 64 blocks; bosses, villagers, pets, named/persistent, active-target mobs excluded) |
 | M21 | Vanilla (`ItemEntity` / `ExperienceOrb`) | Expands drop/XP merge search radius (default 1.5 blocks) to merge dense drops faster |
-| M22 | Vanilla (`Style`) | Interns **plain** immutable `Style` instances (no click/hover event, font or insertion) from codec/creation paths; `Style.EMPTY` fast path, bounded weak cache (default 65,536) |
+| M22 | Vanilla (`Style`) | Interns **plain** immutable `Style` instances (no click/hover event, font or insertion) from the `Style#create` factory path; `Style.EMPTY` fast path, bounded weak cache (default 65,536) |
 | M23 | Vanilla (`TagKey` / `ResourceKey`) | Interns exact-class `TagKey` / `ResourceKey` instances by canonical (registry, `ResourceLocation`) pair in bounded weak caches (shared cap 32,768); no `Holder` keys |
 | M24 | Vanilla (`BitmapProvider` font images) | **Diagnostics only** in Stage 3 (default OFF): counts font glyph `NativeImage`s; no post-upload release because vanilla provider reuses the image on later bakes |
 | M25 | Vanilla reload listeners | **Diagnostics only** (default OFF): per-listener heap-used deltas alongside M8c timings; measures `AuxRecipeManager`/`RecipeManager` retention without touching recipe data |
