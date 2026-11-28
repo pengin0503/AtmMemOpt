@@ -112,7 +112,7 @@ public final class BerCullingHelper {
 
         if ((dx * dx + dy * dy + dz * dz) > cachedMaxDistSq) {
             CULLED_COUNT.increment();
-            CLASS_STATS.computeIfAbsent(type, k -> new BerStats()).culled.increment();
+            getOrCreateStats(type).culled.increment();
             return true;
         }
         recordRendered(type);
@@ -121,7 +121,15 @@ public final class BerCullingHelper {
 
     private static void recordRendered(Class<?> type) {
         RENDERED_COUNT.increment();
-        CLASS_STATS.computeIfAbsent(type, k -> new BerStats()).rendered.increment();
+        getOrCreateStats(type).rendered.increment();
+    }
+
+    private static BerStats getOrCreateStats(Class<?> type) {
+        BerStats stats = CLASS_STATS.get(type);
+        if (stats != null) {
+            return stats;
+        }
+        return CLASS_STATS.computeIfAbsent(type, k -> new BerStats());
     }
 
     public static int getCachedMaxDist() {
@@ -139,6 +147,8 @@ public final class BerCullingHelper {
 
     public static void resetDiag() {
         CLASS_STATS.clear();
+        CULLED_COUNT.reset();
+        RENDERED_COUNT.reset();
     }
 
     public static List<BerDiagSnapshot> getTopBerStats(int limit) {

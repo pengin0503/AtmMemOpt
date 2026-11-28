@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Controls conditional application of AtmMemOpt mixins based on both
@@ -18,6 +19,18 @@ import java.util.Set;
 public class AtmMemOptMixinPlugin implements IMixinConfigPlugin {
     private static final Logger LOGGER = LoggerFactory.getLogger("AtmMemOptMixinPlugin");
     private static final String MIXIN_PACKAGE_PREFIX = "com.atmmemopt.mixin.";
+    private static final Set<String> APPLIED_MODULES = ConcurrentHashMap.newKeySet();
+
+    public static boolean isModuleApplied(String moduleId) {
+        return APPLIED_MODULES.contains(moduleId);
+    }
+
+    private static boolean recordAndReturn(String moduleId, boolean apply) {
+        if (apply) {
+            APPLIED_MODULES.add(moduleId);
+        }
+        return apply;
+    }
 
     @Override
     public void onLoad(String mixinPackage) {
@@ -38,22 +51,22 @@ public class AtmMemOptMixinPlugin implements IMixinConfigPlugin {
 
         // Module 1: owo-lib DerivedComponentMap optimization
         if (relative.startsWith("owo.")) {
-            return isModPresent("owo") && AtmMemOptConfig.getEarlyBoolean("enableOwoDerivedMapOpt", true);
+            return recordAndReturn("M1", isModPresent("owo") && AtmMemOptConfig.getEarlyBoolean("enableOwoDerivedMapOpt", true));
         }
 
         // Module 2: PatchedDataComponentMap optimization
         if (relative.startsWith("components.")) {
-            return AtmMemOptConfig.getEarlyBoolean("enablePatchedComponentMapOpt", true);
+            return recordAndReturn("M2", AtmMemOptConfig.getEarlyBoolean("enablePatchedComponentMapOpt", true));
         }
 
         // Module 3: Iron's Spellbooks SpellContainer sharing
         if (relative.startsWith("irons.")) {
-            return isModPresent("irons_spellbooks") && AtmMemOptConfig.getEarlyBoolean("enableIronsSpellContainerOpt", true);
+            return recordAndReturn("M3", isModPresent("irons_spellbooks") && AtmMemOptConfig.getEarlyBoolean("enableIronsSpellContainerOpt", true));
         }
 
         // Module 4: Iris / glsl_transformer cache purge
         if (relative.startsWith("iris.")) {
-            return isModPresent("iris") && AtmMemOptConfig.getEarlyBoolean("enableIrisShaderCachePurge", true);
+            return recordAndReturn("M4", isModPresent("iris") && AtmMemOptConfig.getEarlyBoolean("enableIrisShaderCachePurge", true));
         }
 
         // Module 5: NativeImage diagnostics (default OFF)
@@ -62,87 +75,87 @@ public class AtmMemOptMixinPlugin implements IMixinConfigPlugin {
             if (enabled && relative.equals("diag.NativeImageDiagMixin")) {
                 com.atmmemopt.diag.NativeImageTracker.markMixinApplied();
             }
-            return enabled;
+            return recordAndReturn("M5", enabled);
         }
 
         // Module 6: ItemEnchantments interning
         if (relative.startsWith("enchant.")) {
-            return AtmMemOptConfig.getEarlyBoolean("enableItemEnchantmentsOpt", true);
+            return recordAndReturn("M6", AtmMemOptConfig.getEarlyBoolean("enableItemEnchantmentsOpt", true));
         }
 
         // Module 7: VoxelShape / DoubleArrayList deduplication
         if (relative.startsWith("shapes.")) {
-            return AtmMemOptConfig.getEarlyBoolean("enableVoxelShapeOpt", true);
+            return recordAndReturn("M7", AtmMemOptConfig.getEarlyBoolean("enableVoxelShapeOpt", true));
         }
 
         // Module 8: Startup & world-load optimizations
         if (relative.equals("startup.JeiElementSearchMixin") || relative.equals("startup.JeiElementPrefixParserInvoker")) {
-            return isModPresent("jei") && AtmMemOptConfig.getEarlyBoolean("enableJeiParallelFilter", true);
+            return recordAndReturn("M8a", isModPresent("jei") && AtmMemOptConfig.getEarlyBoolean("enableJeiParallelFilter", true));
         }
         if (relative.equals("startup.JeiStuffLootRecipesMixin")) {
-            return isModPresent("jeistuff") && AtmMemOptConfig.getEarlyBoolean("enableJeiStuffSkipLootScan", true);
+            return recordAndReturn("M8b", isModPresent("jeistuff") && AtmMemOptConfig.getEarlyBoolean("enableJeiStuffSkipLootScan", true));
         }
         if (relative.equals("startup.SimpleReloadInstanceMixin")) {
-            return AtmMemOptConfig.getEarlyBoolean("enableReloadProfiler", true);
+            return recordAndReturn("M8c", AtmMemOptConfig.getEarlyBoolean("enableReloadProfiler", true));
         }
 
         // Module 9: Render CPU/GPU optimizations
         if (relative.equals("render.BlockEntityRenderDispatcherMixin")) {
-            return AtmMemOptConfig.getEarlyBoolean("enableBerDistanceCulling", true);
+            return recordAndReturn("M9a", AtmMemOptConfig.getEarlyBoolean("enableBerDistanceCulling", true));
         }
         if (relative.equals("render.MinecraftFpsLimitMixin")) {
-            return AtmMemOptConfig.getEarlyBoolean("enableUnfocusedFpsLimit", true);
+            return recordAndReturn("M9b", AtmMemOptConfig.getEarlyBoolean("enableUnfocusedFpsLimit", true));
         }
         if (relative.equals("render.ParticleEngineMixin")) {
-            return AtmMemOptConfig.getEarlyBoolean("enableParticleDistanceCulling", true);
+            return recordAndReturn("M9c", AtmMemOptConfig.getEarlyBoolean("enableParticleDistanceCulling", true));
         }
         if (relative.equals("render.EntityRenderDispatcherMixin")) {
-            return AtmMemOptConfig.getEarlyBoolean("enableEntityDistanceCulling", true);
+            return recordAndReturn("M9d", AtmMemOptConfig.getEarlyBoolean("enableEntityDistanceCulling", true));
         }
 
         // Module 10: DataComponentPatch interning & CoW map sharing
         if (relative.startsWith("patch.")) {
-            return AtmMemOptConfig.getEarlyBoolean("enableDataComponentPatchOpt", true);
+            return recordAndReturn("M10", AtmMemOptConfig.getEarlyBoolean("enableDataComponentPatchOpt", true));
         }
 
         // Module 11: PalettedContainer ThreadingDetector optimization
         if (relative.startsWith("chunk.")) {
-            return AtmMemOptConfig.getEarlyBoolean("enablePalettedContainerOpt", true);
+            return recordAndReturn("M11", AtmMemOptConfig.getEarlyBoolean("enablePalettedContainerOpt", true));
         }
 
         // Module 12: ResourceLocation interning
         if (relative.startsWith("resloc.")) {
-            return AtmMemOptConfig.getEarlyBoolean("enableResourceLocationOpt", true);
+            return recordAndReturn("M12", AtmMemOptConfig.getEarlyBoolean("enableResourceLocationOpt", true));
         }
 
         // Module 13: Biome Climate.Parameter interning
         if (relative.startsWith("climate.")) {
-            return AtmMemOptConfig.getEarlyBoolean("enableClimateParameterOpt", true);
+            return recordAndReturn("M13", AtmMemOptConfig.getEarlyBoolean("enableClimateParameterOpt", true));
         }
 
         // Module 14: Static SpriteContents mipmap NativeImage release
         if (relative.startsWith("texture.")) {
-            return AtmMemOptConfig.getEarlyBoolean("enableSpriteMipmapRelease", true);
+            return recordAndReturn("M14", AtmMemOptConfig.getEarlyBoolean("enableSpriteMipmapRelease", true));
         }
 
         // Module 15: BakedQuad vertex int[] deduplication
         if (relative.startsWith("model.")) {
-            return AtmMemOptConfig.getEarlyBoolean("enableBakedQuadVertexDedup", true);
+            return recordAndReturn("M15", AtmMemOptConfig.getEarlyBoolean("enableBakedQuadVertexDedup", true));
         }
 
         // Module 16: TagEntry interning
         if (relative.startsWith("tags.")) {
-            return AtmMemOptConfig.getEarlyBoolean("enableTagEntryOpt", true);
+            return recordAndReturn("M16", AtmMemOptConfig.getEarlyBoolean("enableTagEntryOpt", true));
         }
 
         // Module 20: Distant mob AI throttling
         if (relative.equals("tick.MobAiThrottleMixin")) {
-            return AtmMemOptConfig.getEarlyBoolean("enableMobAiThrottling", true);
+            return recordAndReturn("M20", AtmMemOptConfig.getEarlyBoolean("enableMobAiThrottling", true));
         }
 
         // Module 21: ItemEntity / ExperienceOrb merge radius optimization
         if (relative.equals("tick.ItemEntityMergeMixin") || relative.equals("tick.ExperienceOrbMergeMixin")) {
-            return AtmMemOptConfig.getEarlyBoolean("enableEntityMergeOpt", true);
+            return recordAndReturn("M21", AtmMemOptConfig.getEarlyBoolean("enableEntityMergeOpt", true));
         }
 
         return true;

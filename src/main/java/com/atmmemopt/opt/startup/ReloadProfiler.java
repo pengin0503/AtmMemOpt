@@ -79,7 +79,7 @@ public final class ReloadProfiler {
     private static final class ListenerTiming {
         final String name;
         volatile long prepNanos;
-        volatile long applyNanos;
+        final LongAdder applyNanos = new LongAdder();
 
         ListenerTiming(String name) {
             this.name = name;
@@ -90,11 +90,11 @@ public final class ReloadProfiler {
         }
 
         long applyMs() {
-            return applyNanos / 1_000_000L;
+            return applyNanos.sum() / 1_000_000L;
         }
 
         long totalMs() {
-            return (prepNanos + applyNanos) / 1_000_000L;
+            return (prepNanos + applyNanos.sum()) / 1_000_000L;
         }
     }
 
@@ -134,7 +134,7 @@ public final class ReloadProfiler {
                 try {
                     task.run();
                 } finally {
-                    timing.applyNanos += (System.nanoTime() - applyStart);
+                    timing.applyNanos.add(System.nanoTime() - applyStart);
                 }
             });
 

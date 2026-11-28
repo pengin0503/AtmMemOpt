@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -25,6 +26,6 @@ public class JeiStuffLootRecipesMixin {
     ) {
         ReloadProfiler.recordJeiStuffLootSkipped();
         AtmMemOpt.LOGGER.info("[AtmMemOpt] Skipped JEIStuff LootRecipes scan (enableJeiStuffSkipLootScan=true).");
-        cir.setReturnValue(List.of());
+        cir.setReturnValue(new ArrayList<>());
     }
 }

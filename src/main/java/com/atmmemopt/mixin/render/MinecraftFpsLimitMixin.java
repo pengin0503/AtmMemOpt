@@ -1,6 +1,6 @@
 package com.atmmemopt.mixin.render;
 
-import com.atmmemopt.config.AtmMemOptConfig;
+import com.atmmemopt.opt.render.UnfocusedFpsLimitHelper;
 import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -19,7 +19,7 @@ public class MinecraftFpsLimitMixin {
     @Inject(method = "getFramerateLimit", at = @At("RETURN"), cancellable = true)
     private void atmmemopt$limitUnfocusedFps(CallbackInfoReturnable<Integer> cir) {
         if (!this.windowActive) {
-            int limit = AtmMemOptConfig.UNFOCUSED_FPS_LIMIT.get();
+            int limit = UnfocusedFpsLimitHelper.getCachedLimit();
             if (limit > 0 && cir.getReturnValueI() > limit) {
                 cir.setReturnValue(limit);
             }

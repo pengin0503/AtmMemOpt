@@ -178,12 +178,21 @@ public final class IrisCachePurger {
         return new int[]{buildCacheCleared, parseCacheCleared, secondaryCacheCleared, streamsCleared};
     }
 
+    private static final java.util.concurrent.atomic.AtomicBoolean REFLECTION_WARNED = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    private static void warnReflectionOnce(String target, String fieldName, Throwable t) {
+        if (REFLECTION_WARNED.compareAndSet(false, true)) {
+            AtmMemOpt.LOGGER.warn("[AtmMemOpt] IrisCachePurger could not access {}.{} (Iris/glsl_transformer internals may have changed)", target, fieldName, t);
+        }
+    }
+
     private static Object getStaticField(Class<?> cls, String name) {
         try {
             Field f = cls.getDeclaredField(name);
             f.setAccessible(true);
             return f.get(null);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            warnReflectionOnce(cls.getName(), name, t);
             return null;
         }
     }
@@ -197,7 +206,8 @@ public final class IrisCachePurger {
                 return f.get(target);
             } catch (NoSuchFieldException e) {
                 cls = cls.getSuperclass();
-            } catch (Throwable ignored) {
+            } catch (Throwable t) {
+                warnReflectionOnce(target.getClass().getName(), name, t);
                 return null;
             }
         }
@@ -217,7 +227,8 @@ public final class IrisCachePurger {
                 return false;
             } catch (NoSuchFieldException e) {
                 cls = cls.getSuperclass();
-            } catch (Throwable ignored) {
+            } catch (Throwable t) {
+                warnReflectionOnce(target.getClass().getName(), name, t);
                 return false;
             }
         }

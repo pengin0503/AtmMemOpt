@@ -152,6 +152,7 @@ public final class ResourceLocationOptHelper {
     }
 
     public static int getCacheSize() {
+        drainQueue();
         return CACHE.size();
     }
 

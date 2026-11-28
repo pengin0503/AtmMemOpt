@@ -29,6 +29,7 @@ public final class AtmMemOptConfig {
     public static final ModConfigSpec.IntValue IRIS_AUTO_PURGE_DELAY_SECONDS;
     public static final ModConfigSpec.BooleanValue ENABLE_NATIVE_IMAGE_DIAGNOSTICS;
     public static final ModConfigSpec.BooleanValue ENABLE_ITEM_ENCHANTMENTS_OPT;
+    public static final ModConfigSpec.IntValue ITEM_ENCHANTMENTS_MAX_CACHE_ENTRIES;
     public static final ModConfigSpec.BooleanValue ENABLE_VOXEL_SHAPE_OPT;
     public static final ModConfigSpec.IntValue VOXEL_SHAPE_MAX_CACHE_ENTRIES;
     public static final ModConfigSpec.BooleanValue ENABLE_JEI_PARALLEL_FILTER;
@@ -102,6 +103,10 @@ public final class AtmMemOptConfig {
         ENABLE_ITEM_ENCHANTMENTS_OPT = builder
                 .comment("Module 6: Intern immutable ItemEnchantments instances and unify empty instances to ItemEnchantments.EMPTY.")
                 .define("enableItemEnchantmentsOpt", true);
+
+        ITEM_ENCHANTMENTS_MAX_CACHE_ENTRIES = builder
+                .comment("Module 6: Maximum entries in the ItemEnchantments weak intern cache (0 disables non-empty interning while keeping empty unification).")
+                .defineInRange("itemEnchantmentsMaxCacheEntries", 32768, 0, 262144);
 
         ENABLE_VOXEL_SHAPE_OPT = builder
                 .comment("Module 7: Deduplicate immutable ArrayVoxelShape DoubleArrayList coordinates and identical VoxelShape instances.")
@@ -221,7 +226,7 @@ public final class AtmMemOptConfig {
                 .defineInRange("dataComponentPatchMaxCacheEntries", 65536, 0, 262144);
 
         ENABLE_PALETTED_CONTAINER_OPT = builder
-                .comment("Module 11: Replace per-PalettedContainer ThreadingDetector (Semaphore + ReentrantLock) with a shared no-op detector to save ~25-30MB and lock overhead.")
+                .comment("Module 11: Replace per-PalettedContainer ThreadingDetector (Semaphore + ReentrantLock) with a shared no-op detector to save ~25-30MB and lock overhead. Note: disables vanilla crash-on-concurrent-chunk-access detection; disable this if debugging chunk corruption with async chunk mods.")
                 .define("enablePalettedContainerOpt", true);
 
         ENABLE_RESOURCE_LOCATION_OPT = builder

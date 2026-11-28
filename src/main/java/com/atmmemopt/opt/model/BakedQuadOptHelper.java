@@ -17,10 +17,10 @@ import java.util.concurrent.atomic.LongAdder;
  * and interns identical immutable BakedQuad instances within bounded weak-reference caches.
  */
 public final class BakedQuadOptHelper {
-    private static final ConcurrentHashMap<VertexKey, KeyedVertexRef> CACHE = new ConcurrentHashMap<>(8192);
+    private static final ConcurrentHashMap<WeakVertexRef, WeakVertexRef> CACHE = new ConcurrentHashMap<>(8192);
     private static final ReferenceQueue<int[]> QUEUE = new ReferenceQueue<>();
 
-    private static final ConcurrentHashMap<QuadKey, KeyedQuadRef> QUAD_CACHE = new ConcurrentHashMap<>(8192);
+    private static final ConcurrentHashMap<WeakQuadRef, WeakQuadRef> QUAD_CACHE = new ConcurrentHashMap<>(8192);
     private static final ReferenceQueue<BakedQuad> QUAD_QUEUE = new ReferenceQueue<>();
 
     private static final LongAdder VERTEX_HITS = new LongAdder();
@@ -59,8 +59,9 @@ public final class BakedQuadOptHelper {
 
         drainQueue();
 
-        VertexKey key = new VertexKey(vertices);
-        KeyedVertexRef fastRef = CACHE.get(key);
+        int hash = Arrays.hashCode(vertices);
+        WeakVertexRef lookup = new WeakVertexRef(vertices, hash, null);
+        WeakVertexRef fastRef = CACHE.get(lookup);
         if (fastRef != null) {
             int[] cached = fastRef.get();
             if (cached != null) {
@@ -79,9 +80,9 @@ public final class BakedQuadOptHelper {
         // Clone before inserting so caller-side post-construction mutations to the original
         // array cannot corrupt either the map key or the cached canonical array.
         int[] canonical = vertices.clone();
-        VertexKey canonicalKey = new VertexKey(canonical);
+        WeakVertexRef canonicalRef = new WeakVertexRef(canonical, hash, QUEUE);
         final int[][] resultHolder = new int[1][];
-        CACHE.compute(canonicalKey, (k, existingRef) -> {
+        CACHE.compute(canonicalRef, (k, existingRef) -> {
             if (existingRef != null) {
                 int[] cached = existingRef.get();
                 if (cached != null) {
@@ -98,7 +99,7 @@ public final class BakedQuadOptHelper {
                 return null;
             }
             resultHolder[0] = canonical;
-            return new KeyedVertexRef(k, canonical, QUEUE);
+            return canonicalRef;
         });
         return resultHolder[0];
     }
@@ -114,15 +115,9 @@ public final class BakedQuadOptHelper {
 
         drainQuadQueue();
 
-        QuadKey key = new QuadKey(
-                quad.getVertices(),
-                quad.getTintIndex(),
-                quad.getDirection(),
-                quad.getSprite(),
-                quad.isShade(),
-                quad.hasAmbientOcclusion()
-        );
-        KeyedQuadRef fastRef = QUAD_CACHE.get(key);
+        int hash = hashQuad(quad);
+        WeakQuadRef lookup = new WeakQuadRef(quad, hash, null);
+        WeakQuadRef fastRef = QUAD_CACHE.get(lookup);
         if (fastRef != null) {
             BakedQuad cached = fastRef.get();
             if (cached != null) {
@@ -138,8 +133,9 @@ public final class BakedQuadOptHelper {
             return quad;
         }
 
+        WeakQuadRef newRef = new WeakQuadRef(quad, hash, QUAD_QUEUE);
         final BakedQuad[] resultHolder = new BakedQuad[1];
-        QUAD_CACHE.compute(key, (k, existingRef) -> {
+        QUAD_CACHE.compute(newRef, (k, existingRef) -> {
             if (existingRef != null) {
                 BakedQuad cached = existingRef.get();
                 if (cached != null) {
@@ -156,7 +152,7 @@ public final class BakedQuadOptHelper {
                 return null;
             }
             resultHolder[0] = quad;
-            return new KeyedQuadRef(k, quad, QUAD_QUEUE);
+            return newRef;
         });
         return resultHolder[0];
     }
@@ -177,17 +173,44 @@ public final class BakedQuadOptHelper {
     private static void drainQueue() {
         Reference<? extends int[]> ref;
         while ((ref = QUEUE.poll()) != null) {
-            KeyedVertexRef keyed = (KeyedVertexRef) ref;
-            CACHE.remove(keyed.key, keyed);
+            WeakVertexRef keyed = (WeakVertexRef) ref;
+            CACHE.remove(keyed, keyed);
         }
     }
 
     private static void drainQuadQueue() {
         Reference<? extends BakedQuad> ref;
         while ((ref = QUAD_QUEUE.poll()) != null) {
-            KeyedQuadRef keyed = (KeyedQuadRef) ref;
-            QUAD_CACHE.remove(keyed.key, keyed);
+            WeakQuadRef keyed = (WeakQuadRef) ref;
+            QUAD_CACHE.remove(keyed, keyed);
         }
+    }
+
+    private static int hashQuad(BakedQuad quad) {
+        int h = Arrays.hashCode(quad.getVertices());
+        h = 31 * h + quad.getTintIndex();
+        Direction dir = quad.getDirection();
+        h = 31 * h + (dir != null ? dir.ordinal() : -1);
+        h = 31 * h + System.identityHashCode(quad.getSprite());
+        h = 31 * h + (quad.isShade() ? 1 : 0);
+        h = 31 * h + (quad.hasAmbientOcclusion() ? 1 : 0);
+        return h;
+    }
+
+    private static boolean quadsEqual(BakedQuad a, BakedQuad b) {
+        if (a == b) {
+            return true;
+        }
+        if (a.getTintIndex() != b.getTintIndex()
+                || a.getDirection() != b.getDirection()
+                || a.getSprite() != b.getSprite()
+                || a.isShade() != b.isShade()
+                || a.hasAmbientOcclusion() != b.hasAmbientOcclusion()) {
+            return false;
+        }
+        int[] va = a.getVertices();
+        int[] vb = b.getVertices();
+        return va == vb || Arrays.equals(va, vb);
     }
 
     public static long getVertexHits() {
@@ -203,10 +226,12 @@ public final class BakedQuadOptHelper {
     }
 
     public static int getCacheSize() {
+        drainQueue();
         return CACHE.size();
     }
 
     public static int getQuadCacheSize() {
+        drainQuadQueue();
         return QUAD_CACHE.size();
     }
 
@@ -214,39 +239,16 @@ public final class BakedQuadOptHelper {
         return getMaxEntries();
     }
 
-    private static final class KeyedQuadRef extends WeakReference<BakedQuad> {
-        final QuadKey key;
-
-        KeyedQuadRef(QuadKey key, BakedQuad referent, ReferenceQueue<BakedQuad> queue) {
-            super(referent, queue);
-            this.key = key;
-        }
-    }
-
-    private static final class QuadKey {
-        final int[] vertices;
-        final int tintIndex;
-        final Direction direction;
-        final TextureAtlasSprite sprite;
-        final boolean shade;
-        final boolean hasAo;
+    /**
+     * Weak canonical key/value for BakedQuad instances. Holds no strong references to
+     * vertices or TextureAtlasSprite so resource reloads can reclaim all cached quads.
+     */
+    private static final class WeakQuadRef extends WeakReference<BakedQuad> {
         final int hash;
 
-        QuadKey(int[] vertices, int tintIndex, Direction direction, TextureAtlasSprite sprite, boolean shade, boolean hasAo) {
-            this.vertices = vertices;
-            this.tintIndex = tintIndex;
-            this.direction = direction;
-            this.sprite = sprite;
-            this.shade = shade;
-            this.hasAo = hasAo;
-
-            int h = Arrays.hashCode(vertices);
-            h = 31 * h + tintIndex;
-            h = 31 * h + (direction != null ? direction.ordinal() : -1);
-            h = 31 * h + System.identityHashCode(sprite);
-            h = 31 * h + (shade ? 1 : 0);
-            h = 31 * h + (hasAo ? 1 : 0);
-            this.hash = h;
+        WeakQuadRef(BakedQuad referent, int hash, ReferenceQueue<BakedQuad> queue) {
+            super(referent, queue);
+            this.hash = hash;
         }
 
         @Override
@@ -257,33 +259,24 @@ public final class BakedQuadOptHelper {
         @Override
         public boolean equals(Object obj) {
             if (this == obj) return true;
-            if (!(obj instanceof QuadKey other)) return false;
-            return this.hash == other.hash
-                    && this.tintIndex == other.tintIndex
-                    && this.direction == other.direction
-                    && this.sprite == other.sprite
-                    && this.shade == other.shade
-                    && this.hasAo == other.hasAo
-                    && (this.vertices == other.vertices || Arrays.equals(this.vertices, other.vertices));
+            if (!(obj instanceof WeakQuadRef other)) return false;
+            if (this.hash != other.hash) return false;
+            BakedQuad a = this.get();
+            BakedQuad b = other.get();
+            return a != null && b != null && quadsEqual(a, b);
         }
     }
 
-    private static final class KeyedVertexRef extends WeakReference<int[]> {
-        final VertexKey key;
-
-        KeyedVertexRef(VertexKey key, int[] referent, ReferenceQueue<int[]> queue) {
-            super(referent, queue);
-            this.key = key;
-        }
-    }
-
-    private static final class VertexKey {
-        final int[] data;
+    /**
+     * Weak canonical key/value for int[] vertex arrays. Holds no strong reference to
+     * the array so GC can reclaim unreferenced vertex arrays and enqueue removal.
+     */
+    private static final class WeakVertexRef extends WeakReference<int[]> {
         final int hash;
 
-        VertexKey(int[] data) {
-            this.data = data;
-            this.hash = Arrays.hashCode(data);
+        WeakVertexRef(int[] referent, int hash, ReferenceQueue<int[]> queue) {
+            super(referent, queue);
+            this.hash = hash;
         }
 
         @Override
@@ -294,8 +287,11 @@ public final class BakedQuadOptHelper {
         @Override
         public boolean equals(Object obj) {
             if (this == obj) return true;
-            if (!(obj instanceof VertexKey other)) return false;
-            return this.hash == other.hash && Arrays.equals(this.data, other.data);
+            if (!(obj instanceof WeakVertexRef other)) return false;
+            if (this.hash != other.hash) return false;
+            int[] a = this.get();
+            int[] b = other.get();
+            return a != null && b != null && (a == b || Arrays.equals(a, b));
         }
     }
 }

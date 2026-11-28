@@ -129,10 +129,14 @@ public final class SpriteMemoryDiagnostics {
             LOGGER.warn("[AtmMemOpt] Failed to inspect SpriteContents NativeImage usage", t);
         }
 
-        summaries.sort(Comparator.comparingLong(AtlasSummary::nativeBytes).reversed()
-                .thenComparingInt(AtlasSummary::sprites).reversed());
+        sortSummaries(summaries);
 
         return new Report(summaries, totalSprites, totalAnimated, totalLiveImages, totalClosedImages, totalNativeBytes);
+    }
+
+    public static void sortSummaries(List<AtlasSummary> summaries) {
+        summaries.sort(Comparator.comparingLong(AtlasSummary::nativeBytes).reversed()
+                .thenComparing(Comparator.comparingInt(AtlasSummary::sprites).reversed()));
     }
 
     private static long estimateNativeBytes(NativeImage img, Field pixelsField) throws IllegalAccessException {

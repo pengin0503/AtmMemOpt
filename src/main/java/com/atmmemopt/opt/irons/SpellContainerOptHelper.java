@@ -23,6 +23,8 @@ import java.util.concurrent.atomic.LongAdder;
  */
 public final class SpellContainerOptHelper {
     private static final int MAX_STRONG_CACHE = 8192;
+    private static final int MAX_CONTAINER_CACHE = 32768;
+    private static final int MAX_EMPTY_SLOT_ARRAY_LEN = 256;
 
     private static final ConcurrentHashMap<SpellDataKey, SpellData> SPELL_DATA_CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<SpellSlotKey, SpellSlot> SPELL_SLOT_CACHE = new ConcurrentHashMap<>();
@@ -105,6 +107,9 @@ public final class SpellContainerOptHelper {
         if (length < 0) {
             return new SpellSlot[0];
         }
+        if (length > MAX_EMPTY_SLOT_ARRAY_LEN) {
+            return new SpellSlot[length];
+        }
         return EMPTY_SLOT_ARRAYS.computeIfAbsent(length, SpellSlot[]::new);
     }
 
@@ -179,6 +184,12 @@ public final class SpellContainerOptHelper {
             }
         }
 
+        if (CONTAINER_CACHE.size() >= MAX_CONTAINER_CACHE) {
+            return defensiveCopy
+                    ? new SpellContainer(maxSpells, spellWheel, mustEquip, improved, normalized)
+                    : sc;
+        }
+
         final SpellContainer[] resultHolder = new SpellContainer[1];
         CONTAINER_CACHE.compute(key, (k, existingRef) -> {
             if (existingRef != null) {
@@ -194,6 +205,10 @@ public final class SpellContainerOptHelper {
             SpellContainer toCache = defensiveCopy
                     ? new SpellContainer(maxSpells, spellWheel, mustEquip, improved, normalized)
                     : sc;
+            if (CONTAINER_CACHE.size() >= MAX_CONTAINER_CACHE) {
+                resultHolder[0] = toCache;
+                return null;
+            }
             resultHolder[0] = toCache;
             return new KeyedContainerRef(k, toCache, CONTAINER_QUEUE);
         });
@@ -275,9 +290,13 @@ public final class SpellContainerOptHelper {
                     h = 31 * h;
                 } else {
                     SpellData sd = slot.spellData();
-                    h = 31 * h + Objects.hashCode(sd.getSpell());
-                    h = 31 * h + sd.getLevel();
-                    h = 31 * h + (sd.isLocked() ? 1 : 0);
+                    if (sd != null) {
+                        h = 31 * h + Objects.hashCode(sd.getSpell());
+                        h = 31 * h + sd.getLevel();
+                        h = 31 * h + (sd.isLocked() ? 1 : 0);
+                    } else {
+                        h = 31 * h;
+                    }
                     h = 31 * h + slot.index();
                 }
             }
@@ -309,6 +328,8 @@ public final class SpellContainerOptHelper {
                 if (a.index() != b.index()) return false;
                 SpellData da = a.spellData();
                 SpellData db = b.spellData();
+                if (da == db) continue;
+                if (da == null || db == null) return false;
                 if (da.getLevel() != db.getLevel()
                         || da.isLocked() != db.isLocked()
                         || !Objects.equals(da.getSpell(), db.getSpell())) {

@@ -95,6 +95,7 @@ public final class TagEntryOptHelper {
     }
 
     public static int getCacheSize() {
+        drainQueue();
         return CACHE.size();
     }
 

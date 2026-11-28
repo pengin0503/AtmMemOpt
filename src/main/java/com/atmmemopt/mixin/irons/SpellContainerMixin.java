@@ -16,8 +16,9 @@ import java.util.List;
 public class SpellContainerMixin {
     /**
      * Codec decode lambda (SpellContainer.CODEC).
+     * Uses require = 0 so synthetic lambda renumbering in Iron's Spellbooks updates never crashes startup.
      */
-    @Inject(method = "lambda$static$4", at = @At("RETURN"), cancellable = true)
+    @Inject(method = "lambda$static$4", at = @At("RETURN"), cancellable = true, require = 0)
     private static void atmmemopt$internCodecDecode(
             Integer maxSpells,
             Boolean spellWheel,
@@ -31,8 +32,9 @@ public class SpellContainerMixin {
 
     /**
      * StreamCodec decode lambda (SpellContainer.STREAM_CODEC).
+     * Uses require = 0 so synthetic lambda renumbering in Iron's Spellbooks updates never crashes startup.
      */
-    @Inject(method = "lambda$static$7", at = @At("RETURN"), cancellable = true)
+    @Inject(method = "lambda$static$7", at = @At("RETURN"), cancellable = true, require = 0)
     private static void atmmemopt$internStreamDecode(
             FriendlyByteBuf buf,
             CallbackInfoReturnable<ISpellContainer> cir

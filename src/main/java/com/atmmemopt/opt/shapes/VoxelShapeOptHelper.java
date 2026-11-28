@@ -52,7 +52,19 @@ public final class VoxelShapeOptHelper {
     private static final LongAdder DISCRETE_HITS = new LongAdder();
     private static final LongAdder SHAPE_HITS = new LongAdder();
 
+    private static volatile int cachedMaxShapeEntries = 32768;
+    private static volatile boolean configLoaded = false;
+
     private VoxelShapeOptHelper() {
+    }
+
+    public static void refreshConfig() {
+        try {
+            cachedMaxShapeEntries = AtmMemOptConfig.VOXEL_SHAPE_MAX_CACHE_ENTRIES.get();
+            configLoaded = true;
+        } catch (IllegalStateException ignored) {
+            // Config spec not yet loaded during very early bootstrap
+        }
     }
 
     public static DoubleList internDoubleList(DoubleList list) {
@@ -201,12 +213,14 @@ public final class VoxelShapeOptHelper {
     }
 
     private static int getMaxShapeCacheEntries() {
-        try {
-            return AtmMemOptConfig.VOXEL_SHAPE_MAX_CACHE_ENTRIES.get();
-        } catch (IllegalStateException e) {
-            // Config spec not yet loaded during very early bootstrap
-            return 32768;
+        if (!configLoaded) {
+            refreshConfig();
         }
+        return cachedMaxShapeEntries;
+    }
+
+    public static int getCachedMaxShapeEntries() {
+        return getMaxShapeCacheEntries();
     }
 
     public static DiscreteVoxelShape internDiscreteShape(DiscreteVoxelShape dvs) {
@@ -305,6 +319,7 @@ public final class VoxelShapeOptHelper {
     }
 
     public static int getShapeCacheSize() {
+        drainShapeQueue();
         return SHAPE_CACHE.size();
     }
 

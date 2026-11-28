@@ -3,6 +3,8 @@ package com.atmmemopt.mixin.startup;
 import com.atmmemopt.opt.startup.JeiFilterOptHelper;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import mezz.jei.api.runtime.IIngredientManager;
+import mezz.jei.common.config.SearchMode;
 import mezz.jei.common.search.PrefixInfo;
 import mezz.jei.common.search.PrefixedSearchable;
 import mezz.jei.gui.ingredients.IListElement;
@@ -16,6 +18,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.Collection;
@@ -25,7 +28,8 @@ import java.util.Set;
 
 /**
  * Module 8a: Parallelizes ElementSearch constructor index building and lazily builds
- * the TOOLTIPS index only when the user first performs a '#' tooltip search.
+ * the TOOLTIPS index only when the user first performs a '#' tooltip search
+ * (or a plain search when JEI tooltip search mode is ENABLED).
  */
 @Mixin(value = ElementSearch.class, remap = false)
 public abstract class JeiElementSearchMixin {
@@ -36,6 +40,10 @@ public abstract class JeiElementSearchMixin {
     @Shadow
     @Final
     private ElementPrefixParser elementPrefixParser;
+
+    @Shadow
+    @Final
+    private PrefixInfo<IListElementInfo<?>, IListElement<?>> noPrefix;
 
     @Shadow
     private void updateCombinedSearchables() {
@@ -93,13 +101,42 @@ public abstract class JeiElementSearchMixin {
             CallbackInfoReturnable<Set<IListElement<?>>> cir
     ) {
         List<IListElementInfo<?>> deferred = this.atmmemopt$deferredTooltipElements;
-        if (deferred != null && tokenInfo != null && tokenInfo.prefixInfo() == this.atmmemopt$tooltipPrefix) {
+        if (deferred == null || tokenInfo == null || this.atmmemopt$tooltipPrefix == null) {
+            return;
+        }
+        PrefixInfo<IListElementInfo<?>, IListElement<?>> prefix = tokenInfo.prefixInfo();
+        boolean needsTooltips = prefix == this.atmmemopt$tooltipPrefix
+                || (prefix == this.noPrefix && this.atmmemopt$tooltipPrefix.getMode() == SearchMode.ENABLED);
+        if (needsTooltips) {
             this.atmmemopt$deferredTooltipElements = null;
             long start = System.nanoTime();
             PrefixedSearchable<IListElementInfo<?>, IListElement<?>> built = createSearchable(this.atmmemopt$tooltipPrefix, deferred);
             this.prefixedSearchables.put(this.atmmemopt$tooltipPrefix, built);
             this.updateCombinedSearchables();
             JeiFilterOptHelper.recordLazyTooltipBuild((System.nanoTime() - start) / 1_000_000L, deferred.size());
+        }
+    }
+
+    @Inject(method = "add", at = @At("TAIL"), require = 0)
+    private <T> void atmmemopt$syncDeferredAdd(
+            IListElementInfo<T> info,
+            IIngredientManager ingredientManager,
+            CallbackInfo ci
+    ) {
+        List<IListElementInfo<?>> deferred = this.atmmemopt$deferredTooltipElements;
+        if (deferred != null && info != null) {
+            deferred.add(info);
+        }
+    }
+
+    @Inject(method = "rebuildSearchIndexes", at = @At("TAIL"), require = 0)
+    private void atmmemopt$clearDeferredOnExplicitRebuild(
+            Set<ElementSearchIndex> indexes,
+            Collection<IListElementInfo<?>> elements,
+            CallbackInfo ci
+    ) {
+        if (indexes != null && indexes.contains(ElementSearchIndex.TOOLTIPS)) {
+            this.atmmemopt$deferredTooltipElements = null;
         }
     }
 }

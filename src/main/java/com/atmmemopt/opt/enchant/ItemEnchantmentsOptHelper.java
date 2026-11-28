@@ -1,5 +1,6 @@
 package com.atmmemopt.opt.enchant;
 
+import com.atmmemopt.config.AtmMemOptConfig;
 import com.atmmemopt.mixin.enchant.ItemEnchantmentsAccessor;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
@@ -29,7 +30,25 @@ public final class ItemEnchantmentsOptHelper {
     private static final LongAdder EMPTY_UNIFIED = new LongAdder();
     private static final LongAdder INTERN_HITS = new LongAdder();
 
+    private static volatile int cachedMaxEntries = 32768;
+    private static volatile boolean configLoaded = false;
+
     private ItemEnchantmentsOptHelper() {
+    }
+
+    public static void refreshConfig() {
+        try {
+            cachedMaxEntries = AtmMemOptConfig.ITEM_ENCHANTMENTS_MAX_CACHE_ENTRIES.get();
+            configLoaded = true;
+        } catch (IllegalStateException ignored) {
+        }
+    }
+
+    private static int getMaxEntries() {
+        if (!configLoaded) {
+            refreshConfig();
+        }
+        return cachedMaxEntries;
     }
 
     public static ItemEnchantments intern(ItemEnchantments value) {
@@ -61,6 +80,11 @@ public final class ItemEnchantmentsOptHelper {
             return value;
         }
 
+        int maxEntries = getMaxEntries();
+        if (maxEntries <= 0) {
+            return value;
+        }
+
         Object2IntOpenHashMap<Holder<Enchantment>> map = acc.atmmemopt$getEnchantments();
         if (map == null) {
             return value;
@@ -87,7 +111,10 @@ public final class ItemEnchantmentsOptHelper {
             }
         }
 
-        map.trim();
+        if (CACHE.size() >= maxEntries) {
+            return value;
+        }
+
         final ItemEnchantments[] resultHolder = new ItemEnchantments[1];
         CACHE.compute(key, (k, existingRef) -> {
             if (existingRef != null) {
@@ -100,6 +127,11 @@ public final class ItemEnchantmentsOptHelper {
                     return existingRef;
                 }
             }
+            if (CACHE.size() >= maxEntries) {
+                resultHolder[0] = value;
+                return null;
+            }
+            map.trim();
             resultHolder[0] = value;
             return new KeyedEnchantRef(k, value, QUEUE);
         });
@@ -133,6 +165,15 @@ public final class ItemEnchantmentsOptHelper {
 
     public static long getTotalHits() {
         return EMPTY_UNIFIED.sum() + INTERN_HITS.sum();
+    }
+
+    public static int getCacheSize() {
+        drainQueue();
+        return CACHE.size();
+    }
+
+    public static int getCachedMaxEntries() {
+        return getMaxEntries();
     }
 
     private static final class KeyedEnchantRef extends WeakReference<ItemEnchantments> {
