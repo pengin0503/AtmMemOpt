@@ -215,7 +215,25 @@ public final class ResourceLocationOptHelper {
         }
     }
 
-    private static final class ResLocKey {
+    /**
+     * Common view of a cache key: the immutable stored key and the mutable lookup probe
+     * compare through this type so equals() is symmetric in both directions.
+     */
+    private interface LocKey {
+        String namespace();
+        String path();
+        int hash();
+    }
+
+    private static boolean keysEqual(LocKey self, Object obj) {
+        if (self == obj) return true;
+        if (!(obj instanceof LocKey other)) return false;
+        return self.hash() == other.hash()
+                && (self.namespace() == other.namespace() || self.namespace().equals(other.namespace()))
+                && (self.path() == other.path() || self.path().equals(other.path()));
+    }
+
+    private static final class ResLocKey implements LocKey {
         final String namespace;
         final String path;
         final int hash;
@@ -227,17 +245,28 @@ public final class ResourceLocationOptHelper {
         }
 
         @Override
+        public String namespace() {
+            return namespace;
+        }
+
+        @Override
+        public String path() {
+            return path;
+        }
+
+        @Override
+        public int hash() {
+            return hash;
+        }
+
+        @Override
         public int hashCode() {
             return hash;
         }
 
         @Override
         public boolean equals(Object obj) {
-            if (this == obj) return true;
-            if (!(obj instanceof ResLocKey other)) return false;
-            return this.hash == other.hash
-                    && (this.namespace == other.namespace || this.namespace.equals(other.namespace))
-                    && (this.path == other.path || this.path.equals(other.path));
+            return keysEqual(this, obj);
         }
     }
 
@@ -245,7 +274,7 @@ public final class ResourceLocationOptHelper {
      * Mutable, thread-local CHM lookup key. Only ever used for get(); insertion always
      * allocates a fresh immutable ResLocKey so the map never sees a mutated key.
      */
-    private static final class LookupKey {
+    private static final class LookupKey implements LocKey {
         private String namespace;
         private String path;
         private int hash;
@@ -258,30 +287,28 @@ public final class ResourceLocationOptHelper {
         }
 
         @Override
+        public String namespace() {
+            return namespace;
+        }
+
+        @Override
+        public String path() {
+            return path;
+        }
+
+        @Override
+        public int hash() {
+            return hash;
+        }
+
+        @Override
         public int hashCode() {
             return hash;
         }
 
         @Override
         public boolean equals(Object obj) {
-            if (this == obj) return true;
-            String otherNamespace;
-            String otherPath;
-            int otherHash;
-            if (obj instanceof LookupKey other) {
-                otherNamespace = other.namespace;
-                otherPath = other.path;
-                otherHash = other.hash;
-            } else if (obj instanceof ResLocKey other) {
-                otherNamespace = other.namespace;
-                otherPath = other.path;
-                otherHash = other.hash;
-            } else {
-                return false;
-            }
-            return this.hash == otherHash
-                    && (this.namespace == otherNamespace || this.namespace.equals(otherNamespace))
-                    && (this.path == otherPath || this.path.equals(otherPath));
+            return keysEqual(this, obj);
         }
     }
 }

@@ -74,6 +74,21 @@ class AtmMemOptHelpersTest {
     }
 
     @Test
+    void testResourceLocationInterningDedupsByNamespaceAndPath() {
+        ResourceLocationOptHelper.clearWeakCache();
+
+        ResourceLocation a = ResourceLocation.fromNamespaceAndPath(new String("dedup_mod"), new String("shared_path"));
+        ResourceLocation b = ResourceLocation.fromNamespaceAndPath(new String("dedup_mod"), new String("shared_path"));
+        ResourceLocation other = ResourceLocation.fromNamespaceAndPath(new String("other_mod"), new String("shared_path"));
+
+        assertSame(a, ResourceLocationOptHelper.intern(a));
+        assertSame(ResourceLocationOptHelper.intern(a), ResourceLocationOptHelper.intern(b));
+        assertNotSame(ResourceLocationOptHelper.intern(a), ResourceLocationOptHelper.intern(other));
+        assertEquals(2, ResourceLocationOptHelper.getCacheSize());
+        ResourceLocationOptHelper.clearWeakCache();
+    }
+
+    @Test
     void testResourceLocationConcurrentInterning() throws Exception {
         ResourceLocationOptHelper.clearWeakCache();
         ExecutorService pool = Executors.newFixedThreadPool(8);
