@@ -9,6 +9,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ConduitBlockEntity;
 import net.minecraft.world.level.block.entity.StructureBlockEntity;
 import net.minecraft.world.level.block.entity.TheEndGatewayBlockEntity;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
@@ -17,13 +18,27 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 
 /**
- * Module 9a: Zero-allocation distance culling for BlockEntityRenderer dispatch.
+ * Module 9a: distance culling for BlockEntityRenderer dispatch.
  *
  * Phase 5 improvements:
  * - Caches config distance & whitelist patterns and refreshes on ModConfigEvent.Reloading.
  * - Tracks per-BlockEntity-class rendered vs culled counts for /atmmemopt diag ber.
+ *
+ * The culling arithmetic itself performs no allocations (field reads + primitive math),
+ * but the exemption checks below may call renderer-provided methods; whitelisted
+ * renderers are therefore skipped first and the bounding-box check runs only for
+ * block entities that are actually beyond the culling distance.
+ *
+ * Exemptions:
+ * - vanilla long-range BEs (Beacon, EndGateway, Structure, Conduit) - config independent;
+ * - renderers with shouldRenderOffScreen() == true;
+ * - renderers declaring getViewDistance() > 64 (the vanilla default);
+ * - renderers whose getRenderBoundingBox() is AABB.INFINITE;
+ * - BE or renderer class names matching the current berCullingWhitelist patterns.
  */
 public final class BerCullingHelper {
+    private static final int VANILLA_DEFAULT_VIEW_DISTANCE = 64;
+
     private static final LongAdder CULLED_COUNT = new LongAdder();
     private static final LongAdder RENDERED_COUNT = new LongAdder();
 
@@ -32,7 +47,7 @@ public final class BerCullingHelper {
     private static volatile List<? extends String> cachedWhitelist = List.of();
     private static volatile boolean configLoaded = false;
 
-    private static final ConcurrentHashMap<Class<?>, Boolean> WHITELIST_CACHE = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<WhitelistKey, Boolean> WHITELIST_CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<Class<?>, BerStats> CLASS_STATS = new ConcurrentHashMap<>();
 
     private BerCullingHelper() {
@@ -61,31 +76,45 @@ public final class BerCullingHelper {
         }
     }
 
-    private static boolean isWhitelisted(Class<?> type) {
-        Boolean cached = WHITELIST_CACHE.get(type);
+    /** Both the block entity class and the renderer class take part in whitelist matching. */
+    private static boolean isWhitelisted(Class<?> blockEntityClass, Class<?> rendererClass) {
+        WhitelistKey key = new WhitelistKey(blockEntityClass, rendererClass);
+        Boolean cached = WHITELIST_CACHE.get(key);
         if (cached != null) {
             return cached;
         }
-        boolean result = computeWhitelisted(type);
-        WHITELIST_CACHE.put(type, result);
+        boolean result = computeWhitelisted(blockEntityClass, rendererClass);
+        WHITELIST_CACHE.put(key, result);
         return result;
     }
 
-    private static boolean computeWhitelisted(Class<?> type) {
-        if (BeaconBlockEntity.class.isAssignableFrom(type)
-                || TheEndGatewayBlockEntity.class.isAssignableFrom(type)
-                || StructureBlockEntity.class.isAssignableFrom(type)
-                || ConduitBlockEntity.class.isAssignableFrom(type)) {
+    private static boolean computeWhitelisted(Class<?> blockEntityClass, Class<?> rendererClass) {
+        if (BeaconBlockEntity.class.isAssignableFrom(blockEntityClass)
+                || TheEndGatewayBlockEntity.class.isAssignableFrom(blockEntityClass)
+                || StructureBlockEntity.class.isAssignableFrom(blockEntityClass)
+                || ConduitBlockEntity.class.isAssignableFrom(blockEntityClass)) {
             return true;
         }
-        String className = type.getName();
+        String beName = blockEntityClass.getName();
+        String rendererName = rendererClass != null ? rendererClass.getName() : null;
+        // Use the cached (reload-refreshed) patterns; simple loop, the list is small.
         List<? extends String> patterns = cachedWhitelist;
         for (String pattern : patterns) {
-            if (pattern != null && !pattern.isEmpty() && className.contains(pattern)) {
+            if (pattern != null && !pattern.isEmpty()
+                    && (beName.contains(pattern) || (rendererName != null && rendererName.contains(pattern)))) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static <E extends BlockEntity> boolean hasInfiniteRenderBox(BlockEntityRenderer<E> renderer, E blockEntity) {
+        try {
+            return renderer.getRenderBoundingBox(blockEntity) == AABB.INFINITE;
+        } catch (Throwable t) {
+            // A renderer we cannot query is a renderer we must not cull.
+            return true;
+        }
     }
 
     public static <E extends BlockEntity> boolean shouldCull(
@@ -97,9 +126,10 @@ public final class BerCullingHelper {
             return false;
         }
         ensureConfigLoaded();
-
         Class<?> type = blockEntity.getClass();
-        if ((renderer != null && renderer.shouldRenderOffScreen(blockEntity)) || isWhitelisted(type)) {
+        // Decide the whitelist first so exempt renderers avoid shouldRenderOffScreen().
+        if (isWhitelisted(type, renderer != null ? renderer.getClass() : null)
+                || (renderer != null && renderer.shouldRenderOffScreen(blockEntity))) {
             recordRendered(type);
             return false;
         }
@@ -111,8 +141,18 @@ public final class BerCullingHelper {
         double dz = (pos.getZ() + 0.5D) - cam.z;
 
         if ((dx * dx + dy * dy + dz * dz) > cachedMaxDistSq) {
+            // Only a *declared* view distance above the vanilla default warrants an exemption;
+            // Math.max(maxDist, getViewDistance()) would exempt every default renderer (64).
+            if (renderer != null && renderer.getViewDistance() > VANILLA_DEFAULT_VIEW_DISTANCE) {
+                return false;
+            }
+            // AABB.INFINITE declares "visible everywhere"; check it only for BEs that
+            // would otherwise be culled, avoiding an AABB allocation on the near path.
+            if (renderer != null && hasInfiniteRenderBox(renderer, blockEntity)) {
+                return false;
+            }
             CULLED_COUNT.increment();
-            CLASS_STATS.computeIfAbsent(type, k -> new BerStats()).culled.increment();
+            getOrCreateStats(type).culled.increment();
             return true;
         }
         recordRendered(type);
@@ -121,7 +161,15 @@ public final class BerCullingHelper {
 
     private static void recordRendered(Class<?> type) {
         RENDERED_COUNT.increment();
-        CLASS_STATS.computeIfAbsent(type, k -> new BerStats()).rendered.increment();
+        getOrCreateStats(type).rendered.increment();
+    }
+
+    private static BerStats getOrCreateStats(Class<?> type) {
+        BerStats stats = CLASS_STATS.get(type);
+        if (stats != null) {
+            return stats;
+        }
+        return CLASS_STATS.computeIfAbsent(type, k -> new BerStats());
     }
 
     public static int getCachedMaxDist() {
@@ -139,6 +187,8 @@ public final class BerCullingHelper {
 
     public static void resetDiag() {
         CLASS_STATS.clear();
+        CULLED_COUNT.reset();
+        RENDERED_COUNT.reset();
     }
 
     public static List<BerDiagSnapshot> getTopBerStats(int limit) {
@@ -152,12 +202,16 @@ public final class BerCullingHelper {
                             cls.getName(),
                             rendered,
                             culled,
-                            isWhitelisted(cls)
+                            isWhitelisted(cls, null)
                     );
                 })
                 .sorted(Comparator.comparingLong((BerDiagSnapshot s) -> s.rendered() + s.culled()).reversed())
                 .limit(limit)
                 .toList();
+    }
+
+    /** Cache key for whitelist classification: patterns may match either class. */
+    private record WhitelistKey(Class<?> blockEntityClass, Class<?> rendererClass) {
     }
 
     private static final class BerStats {

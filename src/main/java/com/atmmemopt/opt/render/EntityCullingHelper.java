@@ -113,7 +113,7 @@ public final class EntityCullingHelper {
         double dz = entity.getZ() - camZ;
         if ((dx * dx + dy * dy + dz * dz) > maxDistSq) {
             CULLED_COUNT.increment();
-            CLASS_STATS.computeIfAbsent(type, k -> new EntityStats()).culled.increment();
+            getOrCreateStats(type).culled.increment();
             return true;
         }
         recordRendered(type);
@@ -122,7 +122,15 @@ public final class EntityCullingHelper {
 
     private static void recordRendered(Class<?> type) {
         RENDERED_COUNT.increment();
-        CLASS_STATS.computeIfAbsent(type, k -> new EntityStats()).rendered.increment();
+        getOrCreateStats(type).rendered.increment();
+    }
+
+    private static EntityStats getOrCreateStats(Class<?> type) {
+        EntityStats stats = CLASS_STATS.get(type);
+        if (stats != null) {
+            return stats;
+        }
+        return CLASS_STATS.computeIfAbsent(type, k -> new EntityStats());
     }
 
     public static int getCachedGeneralDist() {
@@ -150,6 +158,8 @@ public final class EntityCullingHelper {
 
     public static void resetDiag() {
         CLASS_STATS.clear();
+        CULLED_COUNT.reset();
+        RENDERED_COUNT.reset();
     }
 
     public static List<EntityDiagSnapshot> getTopEntityStats(int limit) {

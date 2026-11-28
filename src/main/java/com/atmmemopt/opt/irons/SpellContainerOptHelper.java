@@ -23,6 +23,12 @@ import java.util.concurrent.atomic.LongAdder;
  */
 public final class SpellContainerOptHelper {
     private static final int MAX_STRONG_CACHE = 8192;
+    private static final int MAX_CONTAINER_CACHE = 32768;
+    /** Only arrays up to this length are eligible for caching; larger requests are allocated at full size, never shrunk. */
+    private static final int MAX_EMPTY_SLOT_LENGTH = 64;
+    /** Cache holds at most one array per length 1..MAX_EMPTY_SLOT_LENGTH, so this bounds it to that many entries. */
+    private static final int MAX_EMPTY_SLOT_CACHE_ENTRIES = MAX_EMPTY_SLOT_LENGTH;
+    private static final SpellSlot[] EMPTY_SLOTS = new SpellSlot[0];
 
     private static final ConcurrentHashMap<SpellDataKey, SpellData> SPELL_DATA_CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<SpellSlotKey, SpellSlot> SPELL_SLOT_CACHE = new ConcurrentHashMap<>();
@@ -102,8 +108,22 @@ public final class SpellContainerOptHelper {
     }
 
     public static SpellSlot[] getEmptySlotArray(int length) {
-        if (length < 0) {
-            return new SpellSlot[0];
+        if (length <= 0) {
+            return EMPTY_SLOTS;
+        }
+        // Oversized requests are served uncached at their full size, never shrunk:
+        // callers declare a SpellContainer with maxSpells = length, so returning a
+        // shorter array would cause an ArrayIndexOutOfBoundsException. The cap below
+        // only bounds the cache, not the size of an uncached allocation.
+        if (length > MAX_EMPTY_SLOT_LENGTH) {
+            return new SpellSlot[length];
+        }
+        SpellSlot[] cached = EMPTY_SLOT_ARRAYS.get(length);
+        if (cached != null) {
+            return cached;
+        }
+        if (EMPTY_SLOT_ARRAYS.size() >= MAX_EMPTY_SLOT_CACHE_ENTRIES) {
+            return new SpellSlot[length];
         }
         return EMPTY_SLOT_ARRAYS.computeIfAbsent(length, SpellSlot[]::new);
     }
@@ -179,6 +199,12 @@ public final class SpellContainerOptHelper {
             }
         }
 
+        if (CONTAINER_CACHE.size() >= MAX_CONTAINER_CACHE) {
+            return defensiveCopy
+                    ? new SpellContainer(maxSpells, spellWheel, mustEquip, improved, normalized)
+                    : sc;
+        }
+
         final SpellContainer[] resultHolder = new SpellContainer[1];
         CONTAINER_CACHE.compute(key, (k, existingRef) -> {
             if (existingRef != null) {
@@ -194,6 +220,10 @@ public final class SpellContainerOptHelper {
             SpellContainer toCache = defensiveCopy
                     ? new SpellContainer(maxSpells, spellWheel, mustEquip, improved, normalized)
                     : sc;
+            if (CONTAINER_CACHE.size() >= MAX_CONTAINER_CACHE) {
+                resultHolder[0] = toCache;
+                return null;
+            }
             resultHolder[0] = toCache;
             return new KeyedContainerRef(k, toCache, CONTAINER_QUEUE);
         });
@@ -275,9 +305,13 @@ public final class SpellContainerOptHelper {
                     h = 31 * h;
                 } else {
                     SpellData sd = slot.spellData();
-                    h = 31 * h + Objects.hashCode(sd.getSpell());
-                    h = 31 * h + sd.getLevel();
-                    h = 31 * h + (sd.isLocked() ? 1 : 0);
+                    if (sd != null) {
+                        h = 31 * h + Objects.hashCode(sd.getSpell());
+                        h = 31 * h + sd.getLevel();
+                        h = 31 * h + (sd.isLocked() ? 1 : 0);
+                    } else {
+                        h = 31 * h;
+                    }
                     h = 31 * h + slot.index();
                 }
             }
@@ -309,6 +343,8 @@ public final class SpellContainerOptHelper {
                 if (a.index() != b.index()) return false;
                 SpellData da = a.spellData();
                 SpellData db = b.spellData();
+                if (da == db) continue;
+                if (da == null || db == null) return false;
                 if (da.getLevel() != db.getLevel()
                         || da.isLocked() != db.isLocked()
                         || !Objects.equals(da.getSpell(), db.getSpell())) {

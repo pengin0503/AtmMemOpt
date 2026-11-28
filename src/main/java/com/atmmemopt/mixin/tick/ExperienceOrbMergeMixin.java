@@ -27,6 +27,7 @@ public class ExperienceOrbMergeMixin {
     ) {
         double r = EntityMergeOptHelper.getXpMergeRadius();
         if (r > value) {
+            EntityMergeOptHelper.recordXpScanExpanded();
             return original.call(box, r);
         }
         return original.call(box, value);

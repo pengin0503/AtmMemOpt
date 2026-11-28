@@ -6,6 +6,7 @@ import it.unimi.dsi.fastutil.objects.Reference2ObjectMap;
 import it.unimi.dsi.fastutil.objects.Reference2ObjectMaps;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.component.DataComponentType;
+import net.minecraft.core.component.DataComponents;
 
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
@@ -23,9 +24,14 @@ import java.util.concurrent.atomic.LongAdder;
  * - Bounded weak-reference cache with ReferenceQueue eviction prevents CHM bloat.
  * - Cleared automatically on ServerStoppedEvent / TagsUpdatedEvent / LoggingOut to prevent
  *   stale dynamic-registry Holder references across world reloads.
+ * - Skips oversized patches (> 8 entries) and high-uniqueness / heavy container or NBT components
+ *   (e.g. CUSTOM_DATA, CONTAINER, BLOCK_ENTITY_DATA) to avoid deep-hashing overhead and retaining
+ *   large object graphs in cache keys.
  * - Guards hashCode/equals with try-catch in case a modded component throws unexpectedly.
  */
 public final class DataComponentPatchOptHelper {
+    private static final int MAX_ENTRIES_PER_PATCH = 8;
+
     private static final ConcurrentHashMap<Object, KeyedPatchRef> CACHE = new ConcurrentHashMap<>();
     private static final ReferenceQueue<DataComponentPatch> QUEUE = new ReferenceQueue<>();
 
@@ -54,6 +60,16 @@ public final class DataComponentPatchOptHelper {
         return cachedMaxEntries;
     }
 
+    private static boolean isHeavyOrUniqueComponent(DataComponentType<?> type) {
+        return type == DataComponents.CUSTOM_DATA
+                || type == DataComponents.CONTAINER
+                || type == DataComponents.BLOCK_ENTITY_DATA
+                || type == DataComponents.ENTITY_DATA
+                || type == DataComponents.BUNDLE_CONTENTS
+                || type == DataComponents.WRITTEN_BOOK_CONTENT
+                || type == DataComponents.WRITABLE_BOOK_CONTENT;
+    }
+
     public static DataComponentPatch intern(DataComponentPatch patch) {
         if (patch == null) {
             return null;
@@ -78,16 +94,28 @@ public final class DataComponentPatchOptHelper {
             return DataComponentPatch.EMPTY;
         }
 
+        int size = map.size();
+        if (size > MAX_ENTRIES_PER_PATCH) {
+            return patch;
+        }
+
         drainQueue();
 
         Object key;
         try {
-            int size = map.size();
             if (size == 1) {
                 Reference2ObjectMap.Entry<DataComponentType<?>, Optional<?>> only =
                         Reference2ObjectMaps.fastIterable(map).iterator().next();
+                if (isHeavyOrUniqueComponent(only.getKey())) {
+                    return patch;
+                }
                 key = new SinglePatchKey(only.getKey(), only.getValue());
             } else {
+                for (Reference2ObjectMap.Entry<DataComponentType<?>, Optional<?>> entry : Reference2ObjectMaps.fastIterable(map)) {
+                    if (isHeavyOrUniqueComponent(entry.getKey())) {
+                        return patch;
+                    }
+                }
                 key = MultiPatchKey.from(map, size);
             }
         } catch (Throwable ignored) {
@@ -171,7 +199,12 @@ public final class DataComponentPatchOptHelper {
     }
 
     public static int getCacheSize() {
+        drainQueue();
         return CACHE.size();
+    }
+
+    public static int getCachedMaxEntries() {
+        return getMaxEntries();
     }
 
     private static final class KeyedPatchRef extends WeakReference<DataComponentPatch> {

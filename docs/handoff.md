@@ -1,29 +1,27 @@
 # AtmMemOpt 引き継ぎドキュメント (`docs/handoff.md`)
 
 - **最終更新:** 2026-11-27
-- **プロジェクトパス:** `C:\Users\pengin0053\.gemini\antigravity\scratch\AtmMemOpt`
-- **対象環境:** Minecraft 1.21.1 / NeoForge 21.1.266 / Java 21（個人用 ATM10 環境）
-- **参照Modフォルダ（読み取り専用）:** `D:\PrismLauncher\instances\All the Mods 10 - ATM10\minecraft\mods`
-- **最新ビルド成果物:** `build/libs/atmmemopt-0.1.0.jar`（Phase 4 完了時点 / 108.0 KB）
+- **対象環境:** Minecraft 1.21.1 / NeoForge 21.1.266 / Java 21（ATM10 環境向け）
+- **依存Mod解決:** デフォルトで Modrinth Maven / CurseMaven から `compileOnly` 解決（ローカル Mod フォルダを使う場合は `-Patm10_mods_dir=<path-to-ATM10-mods>` を指定）
+- **最新ステータス:** Phase 8/9 実装済み ＋ コードレビュー全17件修正反映済み
 
 ---
 
 ## 1. ビルド手順
 
-システムのデフォルト `java` が JDK 17 のため、必ず **JDK 21** を指定してビルドする。
+JDK 21 を指定してビルドする。
 
 ```powershell
-$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-21.0.10"
+$env:JAVA_HOME = "<path-to-JDK-21>"
 $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
-cd "C:\Users\pengin0053\.gemini\antigravity\scratch\AtmMemOpt"
 .\gradlew.bat "-Dorg.gradle.native=false" --no-daemon build
 ```
 
-> **Note:** サンドボックスや環境依存の `native-platform.dll` エラー回避のため `"-Dorg.gradle.native=false"` を付与（PowerShell ではクォート必須）。
+> **Note:** サンドボックスや環境依存の `native-platform.dll` エラー回避のため `"-Dorg.gradle.native=false"` を付与（PowerShell ではクォート必須）。ローカルの ATM10 `mods` フォルダに対してコンパイルしたい場合は `-Patm10_mods_dir="<path-to-ATM10-mods>"` を追加する。
 
 ---
 
-## 2. 実装済みモジュール一覧（Module 1〜9）
+## 2. 実装済みモジュール一覧（Module 1〜21）
 
 全モジュールは `config/atmmemopt-common.toml` のフラグと `AtmMemOptMixinPlugin`（`LoadingModList` による対象Mod存在チェック）の二重制御で安全に ON/OFF 可能。
 
@@ -79,6 +77,7 @@ enableIrisShaderCachePurge = true      # M4
 irisAutoPurgeDelaySeconds = 30         # M4
 enableNativeImageDiagnostics = false   # M5 (デフォルトOFF)
 enableItemEnchantmentsOpt = true       # M6
+itemEnchantmentsMaxCacheEntries = 32768 # M6 (0で非空インターン無効化・空統一のみ維持)
 enableVoxelShapeOpt = true             # M7
 voxelShapeMaxCacheEntries = 32768      # M7 (0で本体キャッシュ無効化・DoubleArrayList/Discreteのみ維持)
 enableJeiParallelFilter = true         # M8a
@@ -131,13 +130,13 @@ xpMergeRadius = 1.5                    # M21
 
 ## 6. 残タスク・次の確認事項
 
-1. **Phase 5 JAR のビルド & 実機テスト（最優先）**
-   - ローカル ATM10 環境で `.\gradlew.bat "-Dorg.gradle.native=false" --no-daemon build` を実行し、`build/libs/atmmemopt-0.1.0.jar` を配置してテスト。
+1. **Phase 8/9 ＋ コードレビュー修正版 JAR の実機テスト（最優先）**
+   - `./gradlew --no-daemon build` で `build/libs/atmmemopt-0.1.0.jar` をビルドし、ATM10 環境でテスト。
    - **確認項目:**
-     - `/atmmemopt status` で M10〜M13 が ON になり、`internHits` / `detectorsAvoided` / `nsHits` / `instHits` が増加しているか。
-     - Spark ヒープサマリで `#14 Reference2ObjectArrayMap` / `#26 DataComponentPatch` / `#30 EntrySet` / `#15 ResourceLocation` / `#56 ThreadingDetector` / `#39 Climate$Parameter` / `#49 BitSetDiscreteVoxelShape` が大幅に減少しているか。
-     - `/atmmemopt diag ber` で拠点の BER 内訳が表示され、`/atmmemopt purge-caches` がエラーなく動作するか。
-     - ワールド退出 → 再入室（動的レジストリ切替）で M10 / M13 のキャッシュクリアが問題なく機能するか。
+     - `/atmmemopt status`（および専用サーバーで `/atmmemopt-server status`）で M1〜M21 の実際の Mixin 適用状態と各種ヒット数・キャッシュサイズが正しく表示されるか。
+     - `/atmmemopt diag sprites` がメモリ使用量の降順で表示され、`/atmmemopt diag ber reset` / `entity reset` で総計と内訳が一致してリセットされるか。
+     - F3+T リソースリロード後に `BakedQuadOptHelper` キャッシュが自動クリアされ、メモリリークしないか。
+     - M21 でホッパー・半ブロック上下のアイテムが貫通マージしないこと、M20 でリード接続・レイド中モブが間引かれないこと。
 2. **`NativeImage` 44.9万個（#27）の原因調査（推奨）**
    - `enableNativeImageDiagnostics = true` で一度だけ起動し、`/atmmemopt diag nativeimage` で未解放 `NativeImage` の呼び出し元 TOP20 を確認（物理メモリ / Swap 圧迫の調査）。
 3. **関連ドキュメント**

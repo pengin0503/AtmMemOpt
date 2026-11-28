@@ -29,6 +29,7 @@ public final class AtmMemOptConfig {
     public static final ModConfigSpec.IntValue IRIS_AUTO_PURGE_DELAY_SECONDS;
     public static final ModConfigSpec.BooleanValue ENABLE_NATIVE_IMAGE_DIAGNOSTICS;
     public static final ModConfigSpec.BooleanValue ENABLE_ITEM_ENCHANTMENTS_OPT;
+    public static final ModConfigSpec.IntValue ITEM_ENCHANTMENTS_MAX_CACHE_ENTRIES;
     public static final ModConfigSpec.BooleanValue ENABLE_VOXEL_SHAPE_OPT;
     public static final ModConfigSpec.IntValue VOXEL_SHAPE_MAX_CACHE_ENTRIES;
     public static final ModConfigSpec.BooleanValue ENABLE_JEI_PARALLEL_FILTER;
@@ -76,19 +77,19 @@ public final class AtmMemOptConfig {
                .push("modules");
 
         ENABLE_OWO_DERIVED_MAP_OPT = builder
-                .comment("Module 1: Lazily allocate/skip owo-lib DerivedComponentMap and its delegate PatchedDataComponentMap when not needed.")
+                .comment("Module 1: Lazily allocate/skip owo-lib DerivedComponentMap and its delegate PatchedDataComponentMap when not needed. Requires restart (mixin toggle read at startup).")
                 .define("enableOwoDerivedMapOpt", true);
 
         ENABLE_PATCHED_COMPONENT_MAP_OPT = builder
-                .comment("Module 2: Optimize PatchedDataComponentMap empty/duplicate patch handling safely without breaking CoW.")
+                .comment("Module 2: Optimize PatchedDataComponentMap empty/duplicate patch handling safely without breaking CoW. Requires restart (mixin toggle read at startup).")
                 .define("enablePatchedComponentMapOpt", true);
 
         ENABLE_IRONS_SPELL_CONTAINER_OPT = builder
-                .comment("Module 3: Share immutable empty/duplicate SpellContainer, SpellSlot, and SpellData instances in Iron's Spellbooks.")
+                .comment("Module 3: Share immutable empty/duplicate SpellContainer, SpellSlot, and SpellData instances in Iron's Spellbooks. Requires restart (mixin toggle read at startup).")
                 .define("enableIronsSpellContainerOpt", true);
 
         ENABLE_IRIS_SHADER_CACHE_PURGE = builder
-                .comment("Module 4: Purge Iris / glsl_transformer AST and token caches after shader pack load and expose purge command.")
+                .comment("Module 4: Purge Iris / glsl_transformer AST and token caches after shader pack load and expose purge command. Requires restart (mixin toggle read at startup).")
                 .define("enableIrisShaderCachePurge", true);
 
         IRIS_AUTO_PURGE_DELAY_SECONDS = builder
@@ -96,15 +97,19 @@ public final class AtmMemOptConfig {
                 .defineInRange("irisAutoPurgeDelaySeconds", 30, 0, 600);
 
         ENABLE_NATIVE_IMAGE_DIAGNOSTICS = builder
-                .comment("Module 5: Track NativeImage allocation stack traces and close() calls for /atmmemopt diag nativeimage. Default OFF due to stack-capture overhead.")
+                .comment("Module 5: Track NativeImage allocation stack traces and close() calls for /atmmemopt diag nativeimage. Default OFF due to stack-capture overhead. Requires restart (mixin toggle read at startup).")
                 .define("enableNativeImageDiagnostics", false);
 
         ENABLE_ITEM_ENCHANTMENTS_OPT = builder
-                .comment("Module 6: Intern immutable ItemEnchantments instances and unify empty instances to ItemEnchantments.EMPTY.")
+                .comment("Module 6: Intern immutable ItemEnchantments instances and unify empty instances to ItemEnchantments.EMPTY. Requires restart (mixin toggle read at startup).")
                 .define("enableItemEnchantmentsOpt", true);
 
+        ITEM_ENCHANTMENTS_MAX_CACHE_ENTRIES = builder
+                .comment("Module 6: Maximum entries in the ItemEnchantments weak intern cache (0 disables non-empty interning while keeping empty unification).")
+                .defineInRange("itemEnchantmentsMaxCacheEntries", 32768, 0, 262144);
+
         ENABLE_VOXEL_SHAPE_OPT = builder
-                .comment("Module 7: Deduplicate immutable ArrayVoxelShape DoubleArrayList coordinates and identical VoxelShape instances.")
+                .comment("Module 7: Deduplicate immutable ArrayVoxelShape DoubleArrayList coordinates and identical VoxelShape instances. Requires restart (mixin toggle read at startup).")
                 .define("enableVoxelShapeOpt", true);
 
         VOXEL_SHAPE_MAX_CACHE_ENTRIES = builder
@@ -112,27 +117,27 @@ public final class AtmMemOptConfig {
                 .defineInRange("voxelShapeMaxCacheEntries", 32768, 0, 262144);
 
         ENABLE_JEI_PARALLEL_FILTER = builder
-                .comment("Module 8a: Parallelize JEI ElementSearch index building (keeps TOOLTIPS/COLORS/CREATIVE_TABS on main thread).")
+                .comment("Module 8a: Parallelize JEI ElementSearch index building (keeps TOOLTIPS/COLORS/CREATIVE_TABS on main thread). Requires restart (mixin toggle read at startup).")
                 .define("enableJeiParallelFilter", true);
 
         JEI_LAZY_TOOLTIP_INDEX = builder
-                .comment("Module 8a: Defer building JEI's heavy TOOLTIPS index (15.9s) until the first '#' tooltip search is performed.")
+                .comment("Module 8a: Defer building JEI's heavy TOOLTIPS index (15.9s) until the first '$' tooltip search is performed. Only effective when enableJeiParallelFilter=true (the JEI mixins are not applied otherwise); no restart needed for this sub-flag itself.")
                 .define("jeiLazyTooltipIndex", true);
 
         JEI_SKIP_TOOLTIP_INDEX = builder
-                .comment("Module 8a (optional): Permanently skip building JEI's #tooltip search index.")
+                .comment("Module 8a (optional): Permanently skip building JEI's $tooltip search index. Only effective when enableJeiParallelFilter=true (the JEI mixins are not applied otherwise); no restart needed for this sub-flag itself.")
                 .define("jeiSkipTooltipIndex", false);
 
         ENABLE_JEISTUFF_SKIP_LOOT_SCAN = builder
-                .comment("Module 8b: Skip JEIStuff's synchronous loot table scan on world join.")
+                .comment("Module 8b: Skip JEIStuff's synchronous loot table scan on world join. Requires restart (mixin toggle read at startup).")
                 .define("enableJeiStuffSkipLootScan", true);
 
         ENABLE_RELOAD_PROFILER = builder
-                .comment("Module 8c: Log Top 10 slowest resource/datapack reload listeners to identify startup & world-load bottlenecks.")
+                .comment("Module 8c: Log Top 10 slowest resource/datapack reload listeners to identify startup & world-load bottlenecks. Requires restart (mixin toggle read at startup).")
                 .define("enableReloadProfiler", true);
 
         ENABLE_BER_DISTANCE_CULLING = builder
-                .comment("Module 9a: Cull BlockEntityRenderer rendering beyond berCullingDistance blocks from camera.")
+                .comment("Module 9a: Cull BlockEntityRenderer rendering beyond berCullingDistance blocks from camera. Requires restart (mixin toggle read at startup).")
                 .define("enableBerDistanceCulling", true);
 
         BER_CULLING_DISTANCE = builder
@@ -161,7 +166,7 @@ public final class AtmMemOptConfig {
                 );
 
         ENABLE_UNFOCUSED_FPS_LIMIT = builder
-                .comment("Module 9b: Cap framerate when Minecraft window is not focused to save GPU/CPU power.")
+                .comment("Module 9b: Cap framerate when Minecraft window is not focused to save GPU/CPU power. Requires restart (mixin toggle read at startup).")
                 .define("enableUnfocusedFpsLimit", true);
 
         UNFOCUSED_FPS_LIMIT = builder
@@ -221,7 +226,7 @@ public final class AtmMemOptConfig {
                 .defineInRange("dataComponentPatchMaxCacheEntries", 65536, 0, 262144);
 
         ENABLE_PALETTED_CONTAINER_OPT = builder
-                .comment("Module 11: Replace per-PalettedContainer ThreadingDetector (Semaphore + ReentrantLock) with a shared no-op detector to save ~25-30MB and lock overhead.")
+                .comment("Module 11: Replace per-PalettedContainer ThreadingDetector (Semaphore + ReentrantLock) with a shared no-op detector to save ~25-30MB and lock overhead. Note: disables vanilla crash-on-concurrent-chunk-access detection; disable this if debugging chunk corruption with async chunk mods.")
                 .define("enablePalettedContainerOpt", true);
 
         ENABLE_RESOURCE_LOCATION_OPT = builder
@@ -308,7 +313,18 @@ public final class AtmMemOptConfig {
         if (raw == null) {
             return defaultValue;
         }
-        return Boolean.parseBoolean(raw.trim());
+        String value = raw.trim();
+        // Boolean.parseBoolean() silently maps typos ("ture", "1", "yes") to false,
+        // disabling a module before NeoForge's ModConfigSpec can validate the value.
+        if (value.equalsIgnoreCase("true")) {
+            return true;
+        }
+        if (value.equalsIgnoreCase("false")) {
+            return false;
+        }
+        LOGGER.warn("[AtmMemOpt] Invalid boolean value '{}' for '{}' in config/atmmemopt-common.toml; using default {}.",
+                value, key, defaultValue);
+        return defaultValue;
     }
 
     private static Map<String, String> loadEarlyValues() {

@@ -32,21 +32,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Compile vanilla/NeoForge modules and run JUnit 5 tests
+      - name: Compile all modules, run JUnit 5 tests, and build JAR
         run: |
-          cat << 'EOF' > /tmp/ci_vanilla.gradle
-          allprojects {
-              afterEvaluate {
-                  tasks.named('compileJava', JavaCompile) {
-                      exclude '**/owo/**'
-                      exclude '**/irons/**'
-                      exclude '**/iris/**'
-                      exclude '**/startup/**'
-                      exclude '**/command/AtmMemOptCommands.java'
-                      exclude '**/AtmMemOpt.java'
-                  }
-              }
-          }
-          EOF
           chmod +x ./gradlew
-          ./gradlew --no-daemon --init-script /tmp/ci_vanilla.gradle test
+          ./gradlew --no-daemon build

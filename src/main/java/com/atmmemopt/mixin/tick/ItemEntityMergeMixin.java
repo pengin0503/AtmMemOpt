@@ -29,7 +29,8 @@ public class ItemEntityMergeMixin {
     ) {
         double r = EntityMergeOptHelper.getItemMergeRadius();
         if (r > x) {
-            return original.call(box, r, Math.max(y, 0.5D), r);
+            EntityMergeOptHelper.recordItemScanExpanded();
+            return original.call(box, r, y, r);
         }
         return original.call(box, x, y, z);
     }

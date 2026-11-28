@@ -39,8 +39,8 @@ public class PatchedDataComponentMapPatchShareMixin {
             Reference2ObjectMap<DataComponentType<?>, Optional<?>> sharedMap =
                     ((DataComponentPatchAccessor) (Object) interned).atmmemopt$getMap();
             if (sharedMap != null && sharedMap != this.patch) {
-                this.patch = sharedMap;
                 this.copyOnWrite = true;
+                this.patch = sharedMap;
                 DataComponentPatchOptHelper.recordMapShare();
             }
             cir.setReturnValue(interned);

@@ -36,14 +36,20 @@ public final class EntityMergeOptHelper {
 
     public static double getItemMergeRadius() {
         ensureConfigLoaded();
-        ITEM_SCANS_EXPANDED.increment();
         return cachedItemRadius;
     }
 
     public static double getXpMergeRadius() {
         ensureConfigLoaded();
-        XP_SCANS_EXPANDED.increment();
         return cachedXpRadius;
+    }
+
+    public static void recordItemScanExpanded() {
+        ITEM_SCANS_EXPANDED.increment();
+    }
+
+    public static void recordXpScanExpanded() {
+        XP_SCANS_EXPANDED.increment();
     }
 
     public static double getCachedItemRadius() {

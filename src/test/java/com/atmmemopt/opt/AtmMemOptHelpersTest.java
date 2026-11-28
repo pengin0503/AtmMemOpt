@@ -1,8 +1,14 @@
 package com.atmmemopt.opt;
 
+import com.atmmemopt.command.AtmMemOptServerCommands;
+import com.atmmemopt.diag.NativeImageTracker;
+import com.atmmemopt.diag.SpriteMemoryDiagnostics;
 import com.atmmemopt.opt.chunk.PalettedContainerOptHelper;
 import com.atmmemopt.opt.climate.ClimateParameterOptHelper;
 import com.atmmemopt.opt.model.BakedQuadOptHelper;
+import com.atmmemopt.opt.render.BerCullingHelper;
+import com.atmmemopt.opt.render.EntityCullingHelper;
+import com.atmmemopt.opt.render.UnfocusedFpsLimitHelper;
 import com.atmmemopt.opt.resloc.ResourceLocationOptHelper;
 import com.atmmemopt.opt.shapes.VoxelShapeOptHelper;
 import com.atmmemopt.opt.tick.EntityMergeOptHelper;
@@ -15,16 +21,29 @@ import net.minecraft.util.ThreadingDetector;
 import net.minecraft.world.level.biome.Climate;
 import org.junit.jupiter.api.Test;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class AtmMemOptHelpersTest {
+
+    private static boolean awaitGcCondition(BooleanSupplier condition) throws InterruptedException {
+        for (int i = 0; i < 40; i++) {
+            System.gc();
+            if (condition.getAsBoolean()) {
+                return true;
+            }
+            Thread.sleep(25);
+        }
+        return condition.getAsBoolean();
+    }
 
     @Test
     void testResourceLocationNamespaceAndInstanceInterning() {
@@ -77,7 +96,7 @@ class AtmMemOptHelpersTest {
     }
 
     @Test
-    void testClimateParameterAndArrayInterning() {
+    void testClimateParameterAndArrayInterningAndGcEviction() throws Exception {
         ClimateParameterOptHelper.clearCache();
 
         Climate.Parameter p1 = ClimateParameterOptHelper.intern(new Climate.Parameter(-1000L, 1000L));
@@ -98,11 +117,20 @@ class AtmMemOptHelpersTest {
         assertSame(arr1, arr2);
         assertSame(p1, arr1[0]);
         assertSame(p3, arr1[1]);
-        assertTrue(ClimateParameterOptHelper.clearCache() >= 3);
+
+        WeakReference<Climate.Parameter[]> weakArr = new WeakReference<>(arr1);
+        arr1 = null;
+        arr2 = null;
+        assertTrue(
+                awaitGcCondition(() -> weakArr.get() == null && ClimateParameterOptHelper.getArrayCacheSize() == 0),
+                "Climate.Parameter[] weak cache entry should be reclaimed by GC (no strong key reference)"
+        );
+
+        assertTrue(ClimateParameterOptHelper.clearCache() >= 2);
     }
 
     @Test
-    void testBakedQuadVertexDefensiveCopyAndQuadInterning() {
+    void testBakedQuadVertexDefensiveCopyQuadInterningAndGcEviction() throws Exception {
         BakedQuadOptHelper.clearCache();
 
         int[] raw1 = new int[]{1, 2, 3, 4, 5, 6, 7, 8};
@@ -126,7 +154,25 @@ class AtmMemOptHelpersTest {
         assertSame(iq1, iq2);
         assertNotSame(iq1, BakedQuadOptHelper.internQuad(qDiffDir));
         assertNotSame(iq1, BakedQuadOptHelper.internQuad(qDiffAo));
-        assertTrue(BakedQuadOptHelper.clearCache() >= 4);
+
+        WeakReference<int[]> weakVerts = new WeakReference<>(canonical1);
+        WeakReference<BakedQuad> weakQuad = new WeakReference<>(iq1);
+        canonical1 = null;
+        canonical2 = null;
+        q1 = null;
+        q2 = null;
+        qDiffDir = null;
+        qDiffAo = null;
+        iq1 = null;
+        iq2 = null;
+
+        assertTrue(
+                awaitGcCondition(() -> weakVerts.get() == null
+                        && weakQuad.get() == null
+                        && BakedQuadOptHelper.getCacheSize() == 0
+                        && BakedQuadOptHelper.getQuadCacheSize() == 0),
+                "BakedQuad vertex and quad weak cache entries should be reclaimed by GC"
+        );
     }
 
     @Test
@@ -147,6 +193,7 @@ class AtmMemOptHelpersTest {
         DoubleList custom5b = VoxelShapeOptHelper.internDoubleList(new DoubleArrayList(new double[]{0.0D, 0.1D, 0.2D, 0.3D, 1.0D}));
         assertSame(custom5a, custom5b);
         assertNotSame(custom4a, custom5a);
+        assertEquals(32768, VoxelShapeOptHelper.getCachedMaxShapeEntries());
     }
 
     @Test
@@ -162,12 +209,85 @@ class AtmMemOptHelpersTest {
     }
 
     @Test
-    void testEntityMergeDefaults() {
+    void testEntityMergeDefaultsAndExplicitCounters() {
+        long beforeItem = EntityMergeOptHelper.getItemScansExpanded();
+        long beforeXp = EntityMergeOptHelper.getXpScansExpanded();
+
         double itemR = EntityMergeOptHelper.getItemMergeRadius();
         double xpR = EntityMergeOptHelper.getXpMergeRadius();
         assertEquals(1.5D, itemR, 1e-9);
         assertEquals(1.5D, xpR, 1e-9);
-        assertTrue(EntityMergeOptHelper.getItemScansExpanded() >= 1);
-        assertTrue(EntityMergeOptHelper.getXpScansExpanded() >= 1);
+        // Reading the radius alone must not increment expanded-scan counters
+        assertEquals(beforeItem, EntityMergeOptHelper.getItemScansExpanded());
+        assertEquals(beforeXp, EntityMergeOptHelper.getXpScansExpanded());
+
+        EntityMergeOptHelper.recordItemScanExpanded();
+        EntityMergeOptHelper.recordXpScanExpanded();
+        assertEquals(beforeItem + 1, EntityMergeOptHelper.getItemScansExpanded());
+        assertEquals(beforeXp + 1, EntityMergeOptHelper.getXpScansExpanded());
+    }
+
+    @Test
+    void testUnfocusedFpsLimitSafeDefaultBeforeConfigLoad() {
+        assertEquals(15, UnfocusedFpsLimitHelper.getCachedLimit());
+    }
+
+    @Test
+    void testSpriteMemoryDiagnosticsDescendingSort() {
+        List<SpriteMemoryDiagnostics.AtlasSummary> list = new ArrayList<>(List.of(
+                new SpriteMemoryDiagnostics.AtlasSummary("small", 10, 0, 10, 0, 100L),
+                new SpriteMemoryDiagnostics.AtlasSummary("tie_fewer_sprites", 5, 0, 5, 0, 5000L),
+                new SpriteMemoryDiagnostics.AtlasSummary("tie_more_sprites", 50, 1, 50, 0, 5000L),
+                new SpriteMemoryDiagnostics.AtlasSummary("largest", 100, 2, 100, 0, 99999L)
+        ));
+
+        SpriteMemoryDiagnostics.sortSummaries(list);
+
+        assertEquals("largest", list.get(0).atlasId());
+        assertEquals("tie_more_sprites", list.get(1).atlasId());
+        assertEquals("tie_fewer_sprites", list.get(2).atlasId());
+        assertEquals("small", list.get(3).atlasId());
+    }
+
+    @Test
+    void testNativeImageTrackerStackWalkerAndReset() {
+        NativeImageTracker.reset();
+        NativeImageTracker.markMixinApplied();
+
+        String site1 = NativeImageTracker.recordAllocation();
+        String site2 = NativeImageTracker.recordAllocation();
+        assertNotNull(site1);
+        assertNotNull(site2);
+        NativeImageTracker.recordClose(site1);
+
+        NativeImageTracker.Totals totals = NativeImageTracker.getTotals();
+        assertEquals(2L, totals.created());
+        assertEquals(1L, totals.closed());
+        assertEquals(1L, totals.unclosed());
+        assertFalse(NativeImageTracker.getTopUnclosed(5).isEmpty());
+
+        NativeImageTracker.setRuntimeEnabled(false);
+        assertNull(NativeImageTracker.recordAllocation());
+
+        NativeImageTracker.reset();
+        assertEquals(0L, NativeImageTracker.getTotals().created());
+    }
+
+    @Test
+    void testBerAndEntityDiagResetClearsTotals() {
+        BerCullingHelper.resetDiag();
+        assertEquals(0L, BerCullingHelper.getCulledCount());
+        assertEquals(0L, BerCullingHelper.getRenderedCount());
+
+        EntityCullingHelper.resetDiag();
+        assertEquals(0L, EntityCullingHelper.getCulledCount());
+        assertEquals(0L, EntityCullingHelper.getRenderedCount());
+    }
+
+    @Test
+    void testModuleStateFormattingDetectsPendingRestart() {
+        // In unit test runtime MixinPlugin has not applied modules
+        assertEquals("OFF", AtmMemOptServerCommands.formatModuleState("M1", false));
+        assertEquals("OFF (on on restart)", AtmMemOptServerCommands.formatModuleState("M1", true));
     }
 }

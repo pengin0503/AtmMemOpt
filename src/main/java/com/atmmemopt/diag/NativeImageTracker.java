@@ -85,31 +85,18 @@ public final class NativeImageTracker {
         return new Totals(created, closed, Math.max(0L, created - closed), STATS.size());
     }
 
+    private static final StackWalker STACK_WALKER = StackWalker.getInstance();
+
     private static String captureCallerSite() {
-        StackTraceElement[] trace = Thread.currentThread().getStackTrace();
-        StringBuilder sb = new StringBuilder(192);
-        int added = 0;
-        for (StackTraceElement frame : trace) {
-            String cls = frame.getClassName();
-            if (cls.equals(Thread.class.getName())
-                    || cls.startsWith("com.atmmemopt.")
-                    || cls.equals("com.mojang.blaze3d.platform.NativeImage")) {
-                continue;
-            }
-            if (added > 0) {
-                sb.append(" <- ");
-            }
-            sb.append(shortenClassName(cls))
-              .append('.')
-              .append(frame.getMethodName())
-              .append(':')
-              .append(frame.getLineNumber());
-            added++;
-            if (added >= MAX_STACK_FRAMES) {
-                break;
-            }
-        }
-        return added == 0 ? "<unknown>" : sb.toString();
+        List<String> frames = STACK_WALKER.walk(stream -> stream.filter(frame -> {
+                    String cls = frame.getClassName();
+                    return !cls.startsWith("com.atmmemopt.")
+                            && !cls.equals("com.mojang.blaze3d.platform.NativeImage");
+                })
+                .limit(MAX_STACK_FRAMES)
+                .map(frame -> shortenClassName(frame.getClassName()) + "." + frame.getMethodName() + ":" + frame.getLineNumber())
+                .toList());
+        return frames.isEmpty() ? "<unknown>" : String.join(" <- ", frames);
     }
 
     private static String shortenClassName(String full) {

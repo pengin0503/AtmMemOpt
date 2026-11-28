@@ -40,9 +40,12 @@ AtmMemOpt reduces heap pressure and GC churn in a large modpack by interning / s
 
 Measured results (Phase 4, spark heap summary): the former top heap consumers (`DerivedComponentMap`, `ItemEnchantments`, `SpellContainer`, `CommonToken`) all dropped out of the top 100; JEI filter build 15.9 s → 0.8 s; ZGC major-GC interval 19.9 s → 105 s.
 
-## Commands (client)
+- Phase 4 in-game test (2026-11-27): JEI filter build 15.9 s → **815 ms**; heap held at 8,476 MB / 12,000 MB.
 
-- `/atmmemopt status` — heap / metaspace / direct-buffer usage plus per-module state and savings counters (M1〜M21)
+## Commands
+
+Client commands (`/atmmemopt`):
+- `/atmmemopt status` — heap / metaspace / direct-buffer usage plus per-module actual Mixin state and savings counters (M1〜M21)
 - `/atmmemopt purge-shader-cache` — immediately releases the Iris `glsl_transformer` caches
 - `/atmmemopt purge-caches` — purges all weak/shader caches across M3, M4, M6, M7, M10, M12, M13, M15, and M16
 - `/atmmemopt diag all` — runs `status` + `sprites` + `ber` + `entity` (+ `nativeimage` if M5 is enabled) in a single command
@@ -51,17 +54,20 @@ Measured results (Phase 4, spark heap summary): the former top heap consumers (`
 - `/atmmemopt diag entity [reset]` — top 20 rendered/culled Entity classes (with whitelist status)
 - `/atmmemopt diag sprites` — zero-overhead breakdown of `TextureAtlas` / `SpriteContents` live `NativeImage` counts and estimated native memory usage
 
+Server / OP commands (permission level 2):
+- `/atmmemopt-server status` (or `/atmmemopt status` on Dedicated Server) — JVM memory summary and server/common module counters
+- `/atmmemopt-server purge-caches` (or `/atmmemopt purge-caches` on Dedicated Server) — purges server/common weak caches
+
 ## Configuration
 
-`config/atmmemopt-common.toml` — one flag per module (`enableOwoDerivedMapOpt`, `enableDataComponentPatchOpt`, `enablePalettedContainerOpt`, `enableResourceLocationOpt`, `enableClimateParameterOpt`, …) plus tunables such as `voxelShapeMaxCacheEntries` (32768), `dataComponentPatchMaxCacheEntries` (65536), `resourceLocationMaxCacheEntries` (131072), `berCullingDistance` (48), and `unfocusedFpsLimit` (15). See `docs/handoff.md` §4 for the full list.
+`config/atmmemopt-common.toml` — one flag per module (`enableOwoDerivedMapOpt`, `enableDataComponentPatchOpt`, `enablePalettedContainerOpt`, `enableResourceLocationOpt`, `enableClimateParameterOpt`, …) plus tunables such as `itemEnchantmentsMaxCacheEntries` (32768), `voxelShapeMaxCacheEntries` (32768), `dataComponentPatchMaxCacheEntries` (65536), `resourceLocationMaxCacheEntries` (131072), `berCullingDistance` (48), and `unfocusedFpsLimit` (15). See `docs/handoff.md` §4 for the full list.
 
 ## Building
 
-Requires JDK 21. Dependencies on the target mods are `compileOnly` file references into a local ATM10 instance — set `atm10_mods_dir` in `gradle.properties` to your own ATM10 `mods` folder first.
+Requires JDK 21. Target mod `compileOnly` dependencies are resolved automatically from Modrinth Maven and CurseMaven (you can optionally pass `-Patm10_mods_dir=<path>` to compile against local ATM10 mod JARs instead).
 
-```powershell
-$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-21.0.10"
-.\gradlew.bat "-Dorg.gradle.native=false" --no-daemon build
+```bash
+./gradlew --no-daemon build
 ```
 
 Output: `build/libs/atmmemopt-0.1.0.jar`. Full build notes in `docs/handoff.md` §1.

@@ -51,8 +51,24 @@ public final class VoxelShapeOptHelper {
     private static final LongAdder DOUBLE_LIST_HITS = new LongAdder();
     private static final LongAdder DISCRETE_HITS = new LongAdder();
     private static final LongAdder SHAPE_HITS = new LongAdder();
+    private static final LongAdder SHAPE_CAP_REJECTIONS = new LongAdder();
+    private static final LongAdder SHAPE_STALE_REFS = new LongAdder();
+    private static final LongAdder SHAPE_DRAINED = new LongAdder();
+    private static final LongAdder DOUBLE_LIST_CAP_REJECTIONS = new LongAdder();
+
+    private static volatile int cachedMaxShapeEntries = 32768;
+    private static volatile boolean configLoaded = false;
 
     private VoxelShapeOptHelper() {
+    }
+
+    public static void refreshConfig() {
+        try {
+            cachedMaxShapeEntries = AtmMemOptConfig.VOXEL_SHAPE_MAX_CACHE_ENTRIES.get();
+            configLoaded = true;
+        } catch (IllegalStateException ignored) {
+            // Config spec not yet loaded during very early bootstrap
+        }
     }
 
     public static DoubleList internDoubleList(DoubleList list) {
@@ -123,6 +139,7 @@ public final class VoxelShapeOptHelper {
             }
             return trimmed;
         }
+        DOUBLE_LIST_CAP_REJECTIONS.increment();
         return list;
     }
 
@@ -163,18 +180,23 @@ public final class VoxelShapeOptHelper {
         );
 
         KeyedShapeRef fastRef = SHAPE_CACHE.get(key);
-        if (fastRef != null) {
-            ArrayVoxelShape cached = fastRef.get();
-            if (cached != null) {
-                if (cached != avs) {
-                    SHAPE_HITS.increment();
-                }
-                return cached;
+        ArrayVoxelShape fastCached = fastRef == null ? null : fastRef.get();
+        // Effectively final so the compute lambda can consult it without a holder allocation:
+        // a stale ref counted here is never counted again in the lambda (at most once per call).
+        final boolean staleCountedOnFastPath = fastRef != null && fastCached == null;
+        if (fastCached != null) {
+            if (fastCached != avs) {
+                SHAPE_HITS.increment();
             }
+            return fastCached;
+        }
+        if (staleCountedOnFastPath) {
+            SHAPE_STALE_REFS.increment();
         }
 
         // Enforce cache cap so one-off rare shapes do not bloat CHM nodes & keys
         if (SHAPE_CACHE.size() >= maxEntries) {
+            SHAPE_CAP_REJECTIONS.increment();
             return avs;
         }
 
@@ -189,8 +211,12 @@ public final class VoxelShapeOptHelper {
                     resultHolder[0] = cached;
                     return existingRef;
                 }
+                if (!staleCountedOnFastPath) {
+                    SHAPE_STALE_REFS.increment();
+                }
             }
             if (SHAPE_CACHE.size() >= maxEntries) {
+                SHAPE_CAP_REJECTIONS.increment();
                 resultHolder[0] = avs;
                 return null;
             }
@@ -201,12 +227,14 @@ public final class VoxelShapeOptHelper {
     }
 
     private static int getMaxShapeCacheEntries() {
-        try {
-            return AtmMemOptConfig.VOXEL_SHAPE_MAX_CACHE_ENTRIES.get();
-        } catch (IllegalStateException e) {
-            // Config spec not yet loaded during very early bootstrap
-            return 32768;
+        if (!configLoaded) {
+            refreshConfig();
         }
+        return cachedMaxShapeEntries;
+    }
+
+    public static int getCachedMaxShapeEntries() {
+        return getMaxShapeCacheEntries();
     }
 
     public static DiscreteVoxelShape internDiscreteShape(DiscreteVoxelShape dvs) {
@@ -288,7 +316,9 @@ public final class VoxelShapeOptHelper {
         Reference<? extends ArrayVoxelShape> ref;
         while ((ref = SHAPE_QUEUE.poll()) != null) {
             KeyedShapeRef keyed = (KeyedShapeRef) ref;
-            SHAPE_CACHE.remove(keyed.key, keyed);
+            if (SHAPE_CACHE.remove(keyed.key, keyed)) {
+                SHAPE_DRAINED.increment();
+            }
         }
     }
 
@@ -304,7 +334,24 @@ public final class VoxelShapeOptHelper {
         return SHAPE_HITS.sum();
     }
 
+    public static long getShapeCapRejections() {
+        return SHAPE_CAP_REJECTIONS.sum();
+    }
+
+    public static long getShapeStaleRefs() {
+        return SHAPE_STALE_REFS.sum();
+    }
+
+    public static long getShapeDrained() {
+        return SHAPE_DRAINED.sum();
+    }
+
+    public static long getDoubleListCapRejections() {
+        return DOUBLE_LIST_CAP_REJECTIONS.sum();
+    }
+
     public static int getShapeCacheSize() {
+        drainShapeQueue();
         return SHAPE_CACHE.size();
     }
 

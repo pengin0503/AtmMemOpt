@@ -38,12 +38,36 @@ neoForge {
 repositories {
     mavenCentral()
     maven { url = 'https://maven.neoforged.net/releases' }
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Modrinth'
+                url = 'https://api.modrinth.com/maven'
+            }
+        }
+        filter {
+            includeGroup 'maven.modrinth'
+        }
+    }
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'CurseMaven'
+                url = 'https://cursemaven.com'
+            }
+        }
+        filter {
+            includeGroup 'curse.maven'
+        }
+    }
 }
 
 dependencies {
-    // Compile-only references against the actual ATM10 mod JARs (read-only)
+    // Compile-only references against target mods:
+    // Use local ATM10 mods directory if -Patm10_mods_dir is supplied and exists;
+    // otherwise resolve the pinned 1.21.1 NeoForge versions from Modrinth/CurseMaven.
     def modsDirProp = project.findProperty('atm10_mods_dir')
-    def modsDir = modsDirProp ? new File(modsDirProp.toString()) : null
+    def modsDir = (modsDirProp && !modsDirProp.toString().isBlank()) ? new File(modsDirProp.toString()) : null
     if (modsDir != null && modsDir.exists()) {
         compileOnly fileTree(dir: modsDir, includes: [
             'owo-lib-neoforge-*.jar',
@@ -52,6 +76,12 @@ dependencies {
             'jei-1.21.1-neoforge-*.jar',
             'jeistuff-*.jar'
         ])
+    } else {
+        compileOnly('maven.modrinth:owo-lib:wbdHEItB') { transitive = false }
+        compileOnly('maven.modrinth:irons-spells-n-spellbooks:Gzh2DpBL') { transitive = false }
+        compileOnly('maven.modrinth:iris:KduFYu4t') { transitive = false }
+        compileOnly('maven.modrinth:jei:vlNHlgS9') { transitive = false }
+        compileOnly('curse.maven:jei-stuff-978621:9260762') { transitive = false }
     }
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.3'

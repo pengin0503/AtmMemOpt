@@ -8,6 +8,7 @@ import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.npc.AbstractVillager;
+import net.minecraft.world.entity.raid.Raider;
 
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,7 +19,8 @@ import java.util.concurrent.atomic.LongAdder;
  *
  * Safety guarantees:
  * - Never throttles bosses, villagers, tamed pets, persistent/named mobs, vehicles/passengers,
- *   mobs with an active combat target, or classes matching mobAiThrottleWhitelist.
+ *   leashed mobs, recently-hurt mobs, active raiders, mobs with an active combat target,
+ *   or classes matching mobAiThrottleWhitelist.
  * - Uses phase staggering (tickCount + entityId) to avoid synchronized tick spikes.
  */
 public final class MobAiThrottleHelper {
@@ -94,17 +96,16 @@ public final class MobAiThrottleHelper {
                 || mob.hasCustomName()
                 || mob.isVehicle()
                 || mob.isPassenger()
+                || mob.isLeashed()
                 || mob.hurtTime > 0
+                || mob.getLastHurtByMob() != null
                 || (mob instanceof TamableAnimal tamable && tamable.isTame())
+                || (mob instanceof Raider raider && raider.hasActiveRaid())
                 || isWhitelisted(mob.getClass())) {
             return false;
         }
 
         List<ServerPlayer> players = serverLevel.players();
-        if (players.isEmpty()) {
-            return false;
-        }
-
         double mx = mob.getX();
         double my = mob.getY();
         double mz = mob.getZ();

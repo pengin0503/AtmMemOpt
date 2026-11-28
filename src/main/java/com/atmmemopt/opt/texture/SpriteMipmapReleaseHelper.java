@@ -2,6 +2,7 @@ package com.atmmemopt.opt.texture;
 
 import com.mojang.blaze3d.platform.NativeImage;
 
+import java.lang.reflect.Field;
 import java.util.concurrent.atomic.LongAdder;
 
 /**
@@ -18,8 +19,30 @@ public final class SpriteMipmapReleaseHelper {
     private static final LongAdder SPRITES_TRIMMED = new LongAdder();
     private static final LongAdder IMAGES_CLOSED = new LongAdder();
     private static final LongAdder ESTIMATED_BYTES_FREED = new LongAdder();
+    private static final Field PIXELS_FIELD = resolvePixelsField();
 
     private SpriteMipmapReleaseHelper() {
+    }
+
+    private static Field resolvePixelsField() {
+        try {
+            Field f = NativeImage.class.getDeclaredField("pixels");
+            f.setAccessible(true);
+            return f;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static boolean isImageLive(NativeImage img) {
+        if (PIXELS_FIELD == null) {
+            return true;
+        }
+        try {
+            return PIXELS_FIELD.getLong(img) != 0L;
+        } catch (Throwable ignored) {
+            return true;
+        }
     }
 
     public static NativeImage[] releaseStaticMipmaps(NativeImage originalImage, NativeImage[] byMipLevel) {
@@ -30,7 +53,7 @@ public final class SpriteMipmapReleaseHelper {
         long bytes = 0L;
         for (int i = 1; i < byMipLevel.length; i++) {
             NativeImage mip = byMipLevel[i];
-            if (mip != null && mip != originalImage) {
+            if (mip != null && mip != originalImage && isImageLive(mip)) {
                 try {
                     int components = mip.format() != null ? mip.format().components() : 4;
                     bytes += (long) mip.getWidth() * (long) mip.getHeight() * (long) components;

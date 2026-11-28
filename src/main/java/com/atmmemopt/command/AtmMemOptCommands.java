@@ -4,26 +4,21 @@ import com.atmmemopt.AtmMemOpt;
 import com.atmmemopt.config.AtmMemOptConfig;
 import com.atmmemopt.diag.NativeImageTracker;
 import com.atmmemopt.diag.SpriteMemoryDiagnostics;
-import com.atmmemopt.opt.chunk.PalettedContainerOptHelper;
 import com.atmmemopt.opt.climate.ClimateParameterOptHelper;
-import com.atmmemopt.opt.components.PatchedMapOptStats;
 import com.atmmemopt.opt.enchant.ItemEnchantmentsOptHelper;
 import com.atmmemopt.opt.iris.IrisCachePurger;
-import com.atmmemopt.opt.irons.SpellContainerOptHelper;
 import com.atmmemopt.opt.model.BakedQuadOptHelper;
-import com.atmmemopt.opt.owo.OwoDerivedOptHelper;
 import com.atmmemopt.opt.patch.DataComponentPatchOptHelper;
 import com.atmmemopt.opt.render.BerCullingHelper;
 import com.atmmemopt.opt.render.EntityCullingHelper;
 import com.atmmemopt.opt.render.ParticleCullingHelper;
+import com.atmmemopt.opt.render.UnfocusedFpsLimitHelper;
 import com.atmmemopt.opt.resloc.ResourceLocationOptHelper;
 import com.atmmemopt.opt.shapes.VoxelShapeOptHelper;
 import com.atmmemopt.opt.startup.JeiFilterOptHelper;
 import com.atmmemopt.opt.startup.ReloadProfiler;
 import com.atmmemopt.opt.tags.TagEntryOptHelper;
 import com.atmmemopt.opt.texture.SpriteMipmapReleaseHelper;
-import com.atmmemopt.opt.tick.EntityMergeOptHelper;
-import com.atmmemopt.opt.tick.MobAiThrottleHelper;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -31,11 +26,6 @@ import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.neoforged.fml.ModList;
 
-import java.lang.management.BufferPoolMXBean;
-import java.lang.management.ManagementFactory;
-import java.lang.management.MemoryMXBean;
-import java.lang.management.MemoryPoolMXBean;
-import java.lang.management.MemoryUsage;
 import java.util.List;
 
 /**
@@ -79,73 +69,15 @@ public final class AtmMemOptCommands {
     }
 
     private static int executeStatus(CommandSourceStack source) {
-        MemoryMXBean memBean = ManagementFactory.getMemoryMXBean();
-        MemoryUsage heap = memBean.getHeapMemoryUsage();
-        MemoryUsage nonHeap = memBean.getNonHeapMemoryUsage();
-
         StringBuilder logBuf = new StringBuilder();
         sendAndLog(source, logBuf, Component.literal("=== AtmMemOpt Memory Status ===").withStyle(ChatFormatting.GOLD));
-        sendAndLog(source, logBuf, Component.literal(String.format(
-                "Heap: %s / %s (max %s)",
-                fmtMB(heap.getUsed()), fmtMB(heap.getCommitted()), fmtMB(heap.getMax())
-        )).withStyle(ChatFormatting.WHITE));
-        sendAndLog(source, logBuf, Component.literal(String.format(
-                "Non-Heap: %s / %s",
-                fmtMB(nonHeap.getUsed()), fmtMB(nonHeap.getCommitted())
-        )).withStyle(ChatFormatting.WHITE));
+        AtmMemOptServerCommands.appendJvmMemorySummary(source, logBuf);
+        AtmMemOptServerCommands.appendCommonModulesStatus(source, logBuf);
 
-        for (MemoryPoolMXBean pool : ManagementFactory.getMemoryPoolMXBeans()) {
-            String name = pool.getName();
-            if (name.contains("Metaspace") || name.contains("Old Gen") || name.contains("G1 Old")) {
-                MemoryUsage u = pool.getUsage();
-                if (u != null) {
-                    sendAndLog(source, logBuf, Component.literal(String.format(
-                            "  Pool [%s]: %s / %s",
-                            name, fmtMB(u.getUsed()), fmtMB(u.getCommitted())
-                    )).withStyle(ChatFormatting.GRAY));
-                }
-            }
-        }
-
-        for (BufferPoolMXBean bp : ManagementFactory.getPlatformMXBeans(BufferPoolMXBean.class)) {
-            sendAndLog(source, logBuf, Component.literal(String.format(
-                    "BufferPool [%s]: count=%d, used=%s, cap=%s",
-                    bp.getName(), bp.getCount(), fmtMB(bp.getMemoryUsed()), fmtMB(bp.getTotalCapacity())
-            )).withStyle(ChatFormatting.AQUA));
-        }
-
-        boolean owoOpt = ModList.get().isLoaded("owo") && AtmMemOptConfig.ENABLE_OWO_DERIVED_MAP_OPT.get();
-        sendAndLog(source, logBuf, Component.literal(String.format(
-                "M1 (owo DerivedMap): %s | unwrapped=%d, customKept=%d",
-                owoOpt ? "ON" : "OFF",
-                OwoDerivedOptHelper.getUnwrappedCount(),
-                OwoDerivedOptHelper.getKeptCustomCount()
-        )).withStyle(ChatFormatting.GREEN));
-
-        boolean m2Opt = AtmMemOptConfig.ENABLE_PATCHED_COMPONENT_MAP_OPT.get();
-        sendAndLog(source, logBuf, Component.literal(String.format(
-                "M2 (PatchedComponentMap): %s | hits=%d (applySkip=%d, restoreFast=%d, fromEmpty=%d)",
-                m2Opt ? "ON" : "OFF",
-                PatchedMapOptStats.getTotalHits(),
-                PatchedMapOptStats.getSkippedEmptyApply(),
-                PatchedMapOptStats.getNormalizedEmptyRestore(),
-                PatchedMapOptStats.getFastFromEmptyPatch()
-        )).withStyle(ChatFormatting.GREEN));
-
-        boolean m3Opt = ModList.get().isLoaded("irons_spellbooks") && AtmMemOptConfig.ENABLE_IRONS_SPELL_CONTAINER_OPT.get();
-        sendAndLog(source, logBuf, Component.literal(String.format(
-                "M3 (Iron's SpellContainer): %s | containerHits=%d, slotHits=%d, dataHits=%d, getOrCreateSaved=%d",
-                m3Opt ? "ON" : "OFF",
-                SpellContainerOptHelper.getContainerHits(),
-                SpellContainerOptHelper.getSpellSlotHits(),
-                SpellContainerOptHelper.getSpellDataHits(),
-                SpellContainerOptHelper.getGetOrCreateAvoided()
-        )).withStyle(ChatFormatting.GREEN));
-
-        boolean m4Opt = ModList.get().isLoaded("iris") && AtmMemOptConfig.ENABLE_IRIS_SHADER_CACHE_PURGE.get();
+        boolean m4Cfg = ModList.get().isLoaded("iris") && AtmMemOptConfig.ENABLE_IRIS_SHADER_CACHE_PURGE.get();
         sendAndLog(source, logBuf, Component.literal(String.format(
                 "M4 (Iris ShaderCache): %s | purges=%d, clearedEntries=%d",
-                m4Opt ? "ON" : "OFF",
+                AtmMemOptServerCommands.formatModuleState("M4", m4Cfg),
                 IrisCachePurger.getPurgeCount(),
                 IrisCachePurger.getTotalEntriesCleared()
         )).withStyle(ChatFormatting.GREEN));
@@ -156,146 +88,59 @@ public final class AtmMemOptCommands {
                 NativeImageTracker.isRuntimeEnabled() ? "RECORDING" : "PAUSED"
         )).withStyle(ChatFormatting.YELLOW));
 
-        boolean m6Opt = AtmMemOptConfig.ENABLE_ITEM_ENCHANTMENTS_OPT.get();
-        sendAndLog(source, logBuf, Component.literal(String.format(
-                "M6 (ItemEnchantments): %s | totalHits=%d (emptyUnified=%d, internHits=%d)",
-                m6Opt ? "ON" : "OFF",
-                ItemEnchantmentsOptHelper.getTotalHits(),
-                ItemEnchantmentsOptHelper.getEmptyUnified(),
-                ItemEnchantmentsOptHelper.getInternHits()
-        )).withStyle(ChatFormatting.GREEN));
-
-        boolean m7Opt = AtmMemOptConfig.ENABLE_VOXEL_SHAPE_OPT.get();
-        sendAndLog(source, logBuf, Component.literal(String.format(
-                "M7 (VoxelShape): %s | doubleListHits=%d, discreteHits=%d, shapeHits=%d, cacheSize=%d/%d",
-                m7Opt ? "ON" : "OFF",
-                VoxelShapeOptHelper.getDoubleListHits(),
-                VoxelShapeOptHelper.getDiscreteHits(),
-                VoxelShapeOptHelper.getShapeHits(),
-                VoxelShapeOptHelper.getShapeCacheSize(),
-                AtmMemOptConfig.VOXEL_SHAPE_MAX_CACHE_ENTRIES.get()
-        )).withStyle(ChatFormatting.GREEN));
-
-        boolean m8Jei = ModList.get().isLoaded("jei") && AtmMemOptConfig.ENABLE_JEI_PARALLEL_FILTER.get();
-        boolean m8JeiStuff = ModList.get().isLoaded("jeistuff") && AtmMemOptConfig.ENABLE_JEISTUFF_SKIP_LOOT_SCAN.get();
+        boolean m8JeiCfg = ModList.get().isLoaded("jei") && AtmMemOptConfig.ENABLE_JEI_PARALLEL_FILTER.get();
+        boolean m8JeiStuffCfg = ModList.get().isLoaded("jeistuff") && AtmMemOptConfig.ENABLE_JEISTUFF_SKIP_LOOT_SCAN.get();
         sendAndLog(source, logBuf, Component.literal(String.format(
                 "M8 (Startup/Load): jeiParallel=%s (last=%dms, lazyTips=%d), jeiStuffSkip=%s (skipped=%d), reloadProfiles=%d",
-                m8Jei ? "ON" : "OFF",
+                AtmMemOptServerCommands.formatModuleState("M8a", m8JeiCfg),
                 JeiFilterOptHelper.getLastBuildMs(),
                 JeiFilterOptHelper.getLazyTooltipBuilds(),
-                m8JeiStuff ? "ON" : "OFF",
+                AtmMemOptServerCommands.formatModuleState("M8b", m8JeiStuffCfg),
                 ReloadProfiler.getJeiStuffLootSkipped(),
                 ReloadProfiler.getReloadProfilesLogged()
         )).withStyle(ChatFormatting.GREEN));
 
-        boolean m9Ber = AtmMemOptConfig.ENABLE_BER_DISTANCE_CULLING.get();
-        boolean m9Fps = AtmMemOptConfig.ENABLE_UNFOCUSED_FPS_LIMIT.get();
         sendAndLog(source, logBuf, Component.literal(String.format(
                 "M9a/b (Render Opt): berCull=%s (dist=%d, culled=%d, rendered=%d), unfocusedFps=%s (%dfps)",
-                m9Ber ? "ON" : "OFF",
+                AtmMemOptServerCommands.formatModuleState("M9a", AtmMemOptConfig.ENABLE_BER_DISTANCE_CULLING.get()),
                 BerCullingHelper.getCachedMaxDist(),
                 BerCullingHelper.getCulledCount(),
                 BerCullingHelper.getRenderedCount(),
-                m9Fps ? "ON" : "OFF",
-                AtmMemOptConfig.UNFOCUSED_FPS_LIMIT.get()
+                AtmMemOptServerCommands.formatModuleState("M9b", AtmMemOptConfig.ENABLE_UNFOCUSED_FPS_LIMIT.get()),
+                UnfocusedFpsLimitHelper.getCachedLimit()
         )).withStyle(ChatFormatting.GREEN));
 
-        boolean m9Particle = AtmMemOptConfig.ENABLE_PARTICLE_DISTANCE_CULLING.get();
-        boolean m9Entity = AtmMemOptConfig.ENABLE_ENTITY_DISTANCE_CULLING.get();
         sendAndLog(source, logBuf, Component.literal(String.format(
                 "M9c/d (Cull Opt): particleCull=%s (dist=%d, culled=%d [dist=%d, unfocus=%d]), entityCull=%s (dist=%d/%d/%d, culled=%d)",
-                m9Particle ? "ON" : "OFF",
+                AtmMemOptServerCommands.formatModuleState("M9c", AtmMemOptConfig.ENABLE_PARTICLE_DISTANCE_CULLING.get()),
                 ParticleCullingHelper.getCachedMaxDist(),
                 ParticleCullingHelper.getTotalCulled(),
                 ParticleCullingHelper.getCulledDistance(),
                 ParticleCullingHelper.getCulledUnfocused(),
-                m9Entity ? "ON" : "OFF",
+                AtmMemOptServerCommands.formatModuleState("M9d", AtmMemOptConfig.ENABLE_ENTITY_DISTANCE_CULLING.get()),
                 EntityCullingHelper.getCachedGeneralDist(),
                 EntityCullingHelper.getCachedItemDist(),
                 EntityCullingHelper.getCachedXpDist(),
                 EntityCullingHelper.getCulledCount()
         )).withStyle(ChatFormatting.GREEN));
 
-        boolean m10Opt = AtmMemOptConfig.ENABLE_DATA_COMPONENT_PATCH_OPT.get();
-        sendAndLog(source, logBuf, Component.literal(String.format(
-                "M10 (DataComponentPatch): %s | internHits=%d, mapShares=%d, emptyUnified=%d, cacheSize=%d/%d",
-                m10Opt ? "ON" : "OFF",
-                DataComponentPatchOptHelper.getInternHits(),
-                DataComponentPatchOptHelper.getMapShares(),
-                DataComponentPatchOptHelper.getEmptyUnified(),
-                DataComponentPatchOptHelper.getCacheSize(),
-                AtmMemOptConfig.DATA_COMPONENT_PATCH_MAX_CACHE_ENTRIES.get()
-        )).withStyle(ChatFormatting.GREEN));
-
-        boolean m11Opt = AtmMemOptConfig.ENABLE_PALETTED_CONTAINER_OPT.get();
-        sendAndLog(source, logBuf, Component.literal(String.format(
-                "M11 (PalettedContainer): %s | detectorsAvoided=%d",
-                m11Opt ? "ON" : "OFF",
-                PalettedContainerOptHelper.getDetectorsAvoided()
-        )).withStyle(ChatFormatting.GREEN));
-
-        boolean m12Opt = AtmMemOptConfig.ENABLE_RESOURCE_LOCATION_OPT.get();
-        sendAndLog(source, logBuf, Component.literal(String.format(
-                "M12 (ResourceLocation): %s | nsHits=%d, instHits=%d, cacheSize=%d/%d",
-                m12Opt ? "ON" : "OFF",
-                ResourceLocationOptHelper.getNamespaceHits(),
-                ResourceLocationOptHelper.getInstanceHits(),
-                ResourceLocationOptHelper.getCacheSize(),
-                ResourceLocationOptHelper.getCachedMaxEntries()
-        )).withStyle(ChatFormatting.GREEN));
-
-        boolean m13Opt = AtmMemOptConfig.ENABLE_CLIMATE_PARAMETER_OPT.get();
-        sendAndLog(source, logBuf, Component.literal(String.format(
-                "M13/18 (Climate.Parameter): %s | paramHits=%d, arrayHits=%d, cache=%d/%d",
-                m13Opt ? "ON" : "OFF",
-                ClimateParameterOptHelper.getInternHits(),
-                ClimateParameterOptHelper.getArrayHits(),
-                ClimateParameterOptHelper.getCacheSize(),
-                ClimateParameterOptHelper.getArrayCacheSize()
-        )).withStyle(ChatFormatting.GREEN));
-
-        boolean m14Opt = AtmMemOptConfig.ENABLE_SPRITE_MIPMAP_RELEASE.get();
         sendAndLog(source, logBuf, Component.literal(String.format(
                 "M14 (SpriteMipmap): %s | spritesTrimmed=%d, mipImagesClosed=%d, estFreed=%s",
-                m14Opt ? "ON" : "OFF",
+                AtmMemOptServerCommands.formatModuleState("M14", AtmMemOptConfig.ENABLE_SPRITE_MIPMAP_RELEASE.get()),
                 SpriteMipmapReleaseHelper.getSpritesTrimmed(),
                 SpriteMipmapReleaseHelper.getImagesClosed(),
                 fmtMB(SpriteMipmapReleaseHelper.getEstimatedBytesFreed())
         )).withStyle(ChatFormatting.GREEN));
 
-        boolean m15Opt = AtmMemOptConfig.ENABLE_BAKED_QUAD_VERTEX_DEDUP.get();
         sendAndLog(source, logBuf, Component.literal(String.format(
                 "M15/17 (BakedQuad): %s | vertHits=%d, quadHits=%d, estSaved=%s, cache=%d/%d (quad=%d)",
-                m15Opt ? "ON" : "OFF",
+                AtmMemOptServerCommands.formatModuleState("M15", AtmMemOptConfig.ENABLE_BAKED_QUAD_VERTEX_DEDUP.get()),
                 BakedQuadOptHelper.getVertexHits(),
                 BakedQuadOptHelper.getQuadHits(),
                 fmtMB(BakedQuadOptHelper.getEstimatedBytesSaved()),
                 BakedQuadOptHelper.getCacheSize(),
                 BakedQuadOptHelper.getCachedMaxEntries(),
                 BakedQuadOptHelper.getQuadCacheSize()
-        )).withStyle(ChatFormatting.GREEN));
-
-        boolean m16Opt = AtmMemOptConfig.ENABLE_TAG_ENTRY_OPT.get();
-        sendAndLog(source, logBuf, Component.literal(String.format(
-                "M16 (TagEntry): %s | internHits=%d, cacheSize=%d",
-                m16Opt ? "ON" : "OFF",
-                TagEntryOptHelper.getInternHits(),
-                TagEntryOptHelper.getCacheSize()
-        )).withStyle(ChatFormatting.GREEN));
-
-        boolean m20Opt = AtmMemOptConfig.ENABLE_MOB_AI_THROTTLING.get();
-        boolean m21Opt = AtmMemOptConfig.ENABLE_ENTITY_MERGE_OPT.get();
-        sendAndLog(source, logBuf, Component.literal(String.format(
-                "M20/21 (TPS Opt): mobAi=%s (dist=%d/%d, skipped=%d), merge=%s (item=%.1f/xp=%.1f, scans=%d/%d)",
-                m20Opt ? "ON" : "OFF",
-                MobAiThrottleHelper.getCachedNearDist(),
-                MobAiThrottleHelper.getCachedFarDist(),
-                MobAiThrottleHelper.getThrottledTicks(),
-                m21Opt ? "ON" : "OFF",
-                EntityMergeOptHelper.getCachedItemRadius(),
-                EntityMergeOptHelper.getCachedXpRadius(),
-                EntityMergeOptHelper.getItemScansExpanded(),
-                EntityMergeOptHelper.getXpScansExpanded()
         )).withStyle(ChatFormatting.GREEN));
 
         AtmMemOpt.LOGGER.info("\n{}", logBuf);
@@ -376,7 +221,9 @@ public final class AtmMemOptCommands {
     }
 
     private static int executePurgeAllCaches(CommandSourceStack source) {
-        int m3Cleared = ModList.get().isLoaded("irons_spellbooks") ? SpellContainerOptHelper.clearWeakCache() : 0;
+        // Route through the server-side bridge; no direct optional-helper reference here.
+        int m3Cleared = ModList.get().isLoaded("irons_spellbooks")
+                ? AtmMemOptServerCommands.IronsSpellbooksBridge.clearWeakCache() : 0;
         int m4Cleared = ModList.get().isLoaded("iris") ? IrisCachePurger.purgeNow().totalEntries() : 0;
         int m6Cleared = ItemEnchantmentsOptHelper.clearCache();
         int m7Cleared = VoxelShapeOptHelper.clearWeakCaches();

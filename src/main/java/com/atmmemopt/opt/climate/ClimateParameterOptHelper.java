@@ -19,7 +19,7 @@ public final class ClimateParameterOptHelper {
 
     private static final ConcurrentHashMap<ParamKey, KeyedParamRef> CACHE = new ConcurrentHashMap<>(2048);
     private static final ReferenceQueue<Climate.Parameter> QUEUE = new ReferenceQueue<>();
-    private static final ConcurrentHashMap<ParamArrayKey, KeyedArrayRef> ARRAY_CACHE = new ConcurrentHashMap<>(4096);
+    private static final ConcurrentHashMap<WeakParamArrayRef, WeakParamArrayRef> ARRAY_CACHE = new ConcurrentHashMap<>(4096);
     private static final ReferenceQueue<Climate.Parameter[]> ARRAY_QUEUE = new ReferenceQueue<>();
 
     private static final LongAdder INTERN_HITS = new LongAdder();
@@ -82,8 +82,9 @@ public final class ClimateParameterOptHelper {
             space[i] = intern(space[i]);
         }
 
-        ParamArrayKey key = new ParamArrayKey(space);
-        KeyedArrayRef fastRef = ARRAY_CACHE.get(key);
+        int hash = Arrays.hashCode(space);
+        WeakParamArrayRef lookup = new WeakParamArrayRef(space, hash, null);
+        WeakParamArrayRef fastRef = ARRAY_CACHE.get(lookup);
         if (fastRef != null) {
             Climate.Parameter[] cached = fastRef.get();
             if (cached != null) {
@@ -98,8 +99,9 @@ public final class ClimateParameterOptHelper {
             return space;
         }
 
+        WeakParamArrayRef newRef = new WeakParamArrayRef(space, hash, ARRAY_QUEUE);
         final Climate.Parameter[][] resultHolder = new Climate.Parameter[1][];
-        ARRAY_CACHE.compute(key, (k, existingRef) -> {
+        ARRAY_CACHE.compute(newRef, (k, existingRef) -> {
             if (existingRef != null) {
                 Climate.Parameter[] cached = existingRef.get();
                 if (cached != null) {
@@ -115,7 +117,7 @@ public final class ClimateParameterOptHelper {
                 return null;
             }
             resultHolder[0] = space;
-            return new KeyedArrayRef(k, space, ARRAY_QUEUE);
+            return newRef;
         });
         return resultHolder[0];
     }
@@ -144,8 +146,8 @@ public final class ClimateParameterOptHelper {
     private static void drainArrayQueue() {
         Reference<? extends Climate.Parameter[]> ref;
         while ((ref = ARRAY_QUEUE.poll()) != null) {
-            KeyedArrayRef keyed = (KeyedArrayRef) ref;
-            ARRAY_CACHE.remove(keyed.key, keyed);
+            WeakParamArrayRef keyed = (WeakParamArrayRef) ref;
+            ARRAY_CACHE.remove(keyed, keyed);
         }
     }
 
@@ -158,10 +160,12 @@ public final class ClimateParameterOptHelper {
     }
 
     public static int getCacheSize() {
+        drainQueue();
         return CACHE.size();
     }
 
     public static int getArrayCacheSize() {
+        drainArrayQueue();
         return ARRAY_CACHE.size();
     }
 
@@ -177,22 +181,16 @@ public final class ClimateParameterOptHelper {
         }
     }
 
-    private static final class KeyedArrayRef extends WeakReference<Climate.Parameter[]> {
-        final ParamArrayKey key;
-
-        KeyedArrayRef(ParamArrayKey key, Climate.Parameter[] referent, ReferenceQueue<Climate.Parameter[]> queue) {
-            super(referent, queue);
-            this.key = key;
-        }
-    }
-
-    private static final class ParamArrayKey {
-        final Climate.Parameter[] params;
+    /**
+     * Weak canonical key/value for Climate.Parameter[] arrays. Holds no strong reference
+     * so GC can reclaim unreferenced arrays and enqueue cache eviction.
+     */
+    private static final class WeakParamArrayRef extends WeakReference<Climate.Parameter[]> {
         final int hash;
 
-        ParamArrayKey(Climate.Parameter[] params) {
-            this.params = params;
-            this.hash = Arrays.hashCode(params);
+        WeakParamArrayRef(Climate.Parameter[] referent, int hash, ReferenceQueue<Climate.Parameter[]> queue) {
+            super(referent, queue);
+            this.hash = hash;
         }
 
         @Override
@@ -203,8 +201,11 @@ public final class ClimateParameterOptHelper {
         @Override
         public boolean equals(Object obj) {
             if (this == obj) return true;
-            if (!(obj instanceof ParamArrayKey other)) return false;
-            return this.hash == other.hash && Arrays.equals(this.params, other.params);
+            if (!(obj instanceof WeakParamArrayRef other)) return false;
+            if (this.hash != other.hash) return false;
+            Climate.Parameter[] a = this.get();
+            Climate.Parameter[] b = other.get();
+            return a != null && b != null && (a == b || Arrays.equals(a, b));
         }
     }
 }

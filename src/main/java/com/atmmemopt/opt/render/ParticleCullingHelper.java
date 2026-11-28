@@ -55,7 +55,7 @@ public final class ParticleCullingHelper {
             return false;
         }
         Camera camera = mc.gameRenderer.getMainCamera();
-        if (camera == null) {
+        if (camera == null || !camera.isInitialized()) {
             return false;
         }
         Vec3 cam = camera.getPosition();
