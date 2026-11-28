@@ -83,35 +83,43 @@ public final class AtmMemOptCommands {
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M5 (NativeImage Diag): mixin=%s, runtime=%s",
+                "M5 (NativeImage Diag): mixin=%s, runtime=%s, sites=%d/%d, dropped=%d, shallow=%s",
                 NativeImageTracker.isMixinApplied() ? "APPLIED" : "OFF",
-                NativeImageTracker.isRuntimeEnabled() ? "RECORDING" : "PAUSED"
+                NativeImageTracker.isRuntimeEnabled() ? "RECORDING" : "PAUSED",
+                NativeImageTracker.getSiteCount(),
+                NativeImageTracker.getMaxSites(),
+                NativeImageTracker.getDroppedSites(),
+                NativeImageTracker.isShallow()
         )).withStyle(ChatFormatting.YELLOW));
 
         boolean m8JeiCfg = ModList.get().isLoaded("jei") && AtmMemOptConfig.ENABLE_JEI_PARALLEL_FILTER.get();
         boolean m8JeiStuffCfg = ModList.get().isLoaded("jeistuff") && AtmMemOptConfig.ENABLE_JEISTUFF_SKIP_LOOT_SCAN.get();
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M8 (Startup/Load): jeiParallel=%s (last=%dms, lazyTips=%d), jeiStuffSkip=%s (skipped=%d), reloadProfiles=%d",
+                "M8 (Startup/Load): jeiParallel=%s (last=%dms, lazyTips=%d, deferred=%d, deferredDiscarded=%d), jeiStuffSkip=%s (skipped=%d), reloadProfiles=%d",
                 AtmMemOptServerCommands.formatModuleState("M8a", m8JeiCfg),
                 JeiFilterOptHelper.getLastBuildMs(),
                 JeiFilterOptHelper.getLazyTooltipBuilds(),
+                JeiFilterOptHelper.getDeferredElementCount(),
+                JeiFilterOptHelper.getDeferredDiscarded(),
                 AtmMemOptServerCommands.formatModuleState("M8b", m8JeiStuffCfg),
                 ReloadProfiler.getJeiStuffLootSkipped(),
                 ReloadProfiler.getReloadProfilesLogged()
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M9a/b (Render Opt): berCull=%s (dist=%d, culled=%d, rendered=%d), unfocusedFps=%s (%dfps)",
+                "M9a/b (Render Opt): berCull=%s (dist=%d, culled=%d, rendered=%d, classStats=%d, cacheEvals=%d), unfocusedFps=%s (%dfps)",
                 AtmMemOptServerCommands.formatModuleState("M9a", AtmMemOptConfig.ENABLE_BER_DISTANCE_CULLING.get()),
                 BerCullingHelper.getCachedMaxDist(),
                 BerCullingHelper.getCulledCount(),
                 BerCullingHelper.getRenderedCount(),
+                BerCullingHelper.getClassStatsSize(),
+                BerCullingHelper.getWhitelistCacheEvaluations(),
                 AtmMemOptServerCommands.formatModuleState("M9b", AtmMemOptConfig.ENABLE_UNFOCUSED_FPS_LIMIT.get()),
                 UnfocusedFpsLimitHelper.getCachedLimit()
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M9c/d (Cull Opt): particleCull=%s (dist=%d, culled=%d [dist=%d, unfocus=%d]), entityCull=%s (dist=%d/%d/%d, culled=%d)",
+                "M9c/d (Cull Opt): particleCull=%s (dist=%d, culled=%d [dist=%d, unfocus=%d]), entityCull=%s (dist=%d/%d/%d, culled=%d, classStats=%d, cacheEvals=%d)",
                 AtmMemOptServerCommands.formatModuleState("M9c", AtmMemOptConfig.ENABLE_PARTICLE_DISTANCE_CULLING.get()),
                 ParticleCullingHelper.getCachedMaxDist(),
                 ParticleCullingHelper.getTotalCulled(),
@@ -121,19 +129,22 @@ public final class AtmMemOptCommands {
                 EntityCullingHelper.getCachedGeneralDist(),
                 EntityCullingHelper.getCachedItemDist(),
                 EntityCullingHelper.getCachedXpDist(),
-                EntityCullingHelper.getCulledCount()
+                EntityCullingHelper.getCulledCount(),
+                EntityCullingHelper.getClassStatsSize(),
+                EntityCullingHelper.getWhitelistCacheEvaluations()
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M14 (SpriteMipmap): %s | spritesTrimmed=%d, mipImagesClosed=%d, estFreed=%s",
+                "M14 (SpriteMipmap): %s | spritesTrimmed=%d, reTrims=%d, mipImagesClosed=%d, estFreed=%s",
                 AtmMemOptServerCommands.formatModuleState("M14", AtmMemOptConfig.ENABLE_SPRITE_MIPMAP_RELEASE.get()),
                 SpriteMipmapReleaseHelper.getSpritesTrimmed(),
+                SpriteMipmapReleaseHelper.getReTrims(),
                 SpriteMipmapReleaseHelper.getImagesClosed(),
                 fmtMB(SpriteMipmapReleaseHelper.getEstimatedBytesFreed())
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M15/17 (BakedQuad): %s | vertHits=%d, quadHits=%d, estSaved=%s, cache=%d/%d (quad=%d), postBake=%d, evicted=%d",
+                "M15/17 (BakedQuad): %s | vertHits=%d, quadHits=%d, estSaved=%s, vertex=%d/%d, quad=%d/%d, capRej=%d/%d, postBake=%d, evicted=%d",
                 AtmMemOptServerCommands.formatModuleState("M15", AtmMemOptConfig.ENABLE_BAKED_QUAD_VERTEX_DEDUP.get()),
                 BakedQuadOptHelper.getVertexHits(),
                 BakedQuadOptHelper.getQuadHits(),
@@ -141,6 +152,9 @@ public final class AtmMemOptCommands {
                 BakedQuadOptHelper.getCacheSize(),
                 BakedQuadOptHelper.getCachedMaxEntries(),
                 BakedQuadOptHelper.getQuadCacheSize(),
+                BakedQuadOptHelper.getCachedMaxQuadEntries(),
+                BakedQuadOptHelper.getVertexCapRejections(),
+                BakedQuadOptHelper.getQuadCapRejections(),
                 BakedQuadOptHelper.getInternedPostBake(),
                 BakedQuadOptHelper.getEvictions()
         )).withStyle(ChatFormatting.GREEN));
@@ -179,8 +193,10 @@ public final class AtmMemOptCommands {
 
         StringBuilder logBuf = new StringBuilder();
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "=== NativeImage Diagnostics (created=%d, closed=%d, unclosed=%d, sites=%d, recording=%s) ===",
+                "=== NativeImage Diagnostics (created=%d, closed=%d, unclosed=%d, sites=%d/%d, dropped=%d, shallow=%s, recording=%s) ===",
                 totals.created(), totals.closed(), totals.unclosed(), totals.distinctSites(),
+                NativeImageTracker.getMaxSites(), NativeImageTracker.getDroppedSites(),
+                NativeImageTracker.isShallow(),
                 NativeImageTracker.isRuntimeEnabled() ? "ON" : "OFF"
         )).withStyle(ChatFormatting.GOLD));
 
@@ -248,10 +264,12 @@ public final class AtmMemOptCommands {
         List<BerCullingHelper.BerDiagSnapshot> top = BerCullingHelper.getTopBerStats(20);
         StringBuilder logBuf = new StringBuilder();
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "=== BER Culling Diagnostics (dist=%d, rendered=%d, culled=%d) ===",
+                "=== BER Culling Diagnostics (dist=%d, rendered=%d, culled=%d, classStats=%d, cacheEvals=%d) ===",
                 BerCullingHelper.getCachedMaxDist(),
                 BerCullingHelper.getRenderedCount(),
-                BerCullingHelper.getCulledCount()
+                BerCullingHelper.getCulledCount(),
+                BerCullingHelper.getClassStatsSize(),
+                BerCullingHelper.getWhitelistCacheEvaluations()
         )).withStyle(ChatFormatting.GOLD));
 
         if (top.isEmpty()) {
@@ -283,12 +301,14 @@ public final class AtmMemOptCommands {
         List<EntityCullingHelper.EntityDiagSnapshot> top = EntityCullingHelper.getTopEntityStats(20);
         StringBuilder logBuf = new StringBuilder();
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "=== Entity Culling Diagnostics (dist=%d/item=%d/xp=%d, rendered=%d, culled=%d) ===",
+                "=== Entity Culling Diagnostics (dist=%d/item=%d/xp=%d, rendered=%d, culled=%d, classStats=%d, cacheEvals=%d) ===",
                 EntityCullingHelper.getCachedGeneralDist(),
                 EntityCullingHelper.getCachedItemDist(),
                 EntityCullingHelper.getCachedXpDist(),
                 EntityCullingHelper.getRenderedCount(),
-                EntityCullingHelper.getCulledCount()
+                EntityCullingHelper.getCulledCount(),
+                EntityCullingHelper.getClassStatsSize(),
+                EntityCullingHelper.getWhitelistCacheEvaluations()
         )).withStyle(ChatFormatting.GOLD));
 
         if (top.isEmpty()) {

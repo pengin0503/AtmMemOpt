@@ -9,9 +9,9 @@ import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.npc.AbstractVillager;
 import net.minecraft.world.entity.raid.Raider;
+import net.minecraft.world.phys.AABB;
 
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 
 /**
@@ -33,7 +33,20 @@ public final class MobAiThrottleHelper {
     private static volatile List<? extends String> cachedWhitelist = List.of();
     private static volatile boolean configLoaded = false;
 
-    private static final ConcurrentHashMap<Class<?>, Boolean> WHITELIST_CACHE = new ConcurrentHashMap<>();
+    /**
+     * Class-keyed whitelist classification without a strong Class -> Boolean map.
+     * Replaced wholesale on config reload so a changed whitelist is picked up immediately.
+     */
+    private static volatile ClassValue<Boolean> whitelistCache = createWhitelistCache();
+
+    private static ClassValue<Boolean> createWhitelistCache() {
+        return new ClassValue<>() {
+            @Override
+            protected Boolean computeValue(Class<?> type) {
+                return computeWhitelisted(type);
+            }
+        };
+    }
 
     private MobAiThrottleHelper() {
     }
@@ -47,7 +60,7 @@ public final class MobAiThrottleHelper {
             cachedFarDist = far;
             cachedFarDistSq = (double) far * (double) far;
             cachedWhitelist = List.copyOf(AtmMemOptConfig.MOB_AI_THROTTLE_WHITELIST.get());
-            WHITELIST_CACHE.clear();
+            whitelistCache = createWhitelistCache();
             configLoaded = true;
         } catch (IllegalStateException ignored) {
         }
@@ -60,13 +73,7 @@ public final class MobAiThrottleHelper {
     }
 
     private static boolean isWhitelisted(Class<?> type) {
-        Boolean cached = WHITELIST_CACHE.get(type);
-        if (cached != null) {
-            return cached;
-        }
-        boolean result = computeWhitelisted(type);
-        WHITELIST_CACHE.put(type, result);
-        return result;
+        return whitelistCache.get(type);
     }
 
     private static boolean computeWhitelisted(Class<?> type) {
@@ -105,13 +112,18 @@ public final class MobAiThrottleHelper {
             return false;
         }
 
-        List<ServerPlayer> players = serverLevel.players();
+        // Distance-limited spatial lookup instead of scanning every player in the level for
+        // every mob. +2 blocks of padding covers the player's bounding box so no player within
+        // cachedFarDist can be missed by the section-based entity query.
         double mx = mob.getX();
         double my = mob.getY();
         double mz = mob.getZ();
+        double reach = cachedFarDist + 2.0D;
+        AABB searchBox = new AABB(mx - reach, my - reach, mz - reach, mx + reach, my + reach, mz + reach);
+        List<ServerPlayer> nearby = serverLevel.getEntitiesOfClass(ServerPlayer.class, searchBox);
         double minDistSq = Double.MAX_VALUE;
-        for (int i = 0, n = players.size(); i < n; i++) {
-            ServerPlayer p = players.get(i);
+        for (int i = 0, n = nearby.size(); i < n; i++) {
+            ServerPlayer p = nearby.get(i);
             if (p.isSpectator()) {
                 continue;
             }

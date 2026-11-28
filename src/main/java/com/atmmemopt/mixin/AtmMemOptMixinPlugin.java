@@ -45,7 +45,10 @@ public class AtmMemOptMixinPlugin implements IMixinConfigPlugin {
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         if (!mixinClassName.startsWith(MIXIN_PACKAGE_PREFIX)) {
-            return true;
+            // Fail closed: mixins outside our package are not part of this mod's config
+            // gates, so applying them blindly would bypass every toggle below.
+            LOGGER.warn("[AtmMemOpt] Mixin '{}' is outside the mod's mixin package; skipping it.", mixinClassName);
+            return false;
         }
         String relative = mixinClassName.substring(MIXIN_PACKAGE_PREFIX.length());
 
@@ -89,7 +92,10 @@ public class AtmMemOptMixinPlugin implements IMixinConfigPlugin {
         }
 
         // Module 8: Startup & world-load optimizations
-        if (relative.equals("startup.JeiElementSearchMixin") || relative.equals("startup.JeiElementPrefixParserInvoker")) {
+        if (relative.equals("startup.JeiElementSearchMixin")
+                || relative.equals("startup.JeiElementPrefixParserInvoker")
+                || relative.equals("startup.JeiIngredientFilterInvoker")
+                || relative.equals("startup.JeiIngredientFilterRegistrationMixin")) {
             return recordAndReturn("M8a", isModPresent("jei") && AtmMemOptConfig.getEarlyBoolean("enableJeiParallelFilter", true));
         }
         if (relative.equals("startup.JeiStuffLootRecipesMixin")) {

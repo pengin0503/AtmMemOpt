@@ -31,6 +31,8 @@ public final class AtmMemOptConfig {
     public static final ModConfigSpec.BooleanValue ENABLE_IRIS_SHADER_CACHE_PURGE;
     public static final ModConfigSpec.IntValue IRIS_AUTO_PURGE_DELAY_SECONDS;
     public static final ModConfigSpec.BooleanValue ENABLE_NATIVE_IMAGE_DIAGNOSTICS;
+    public static final ModConfigSpec.IntValue NATIVE_IMAGE_DIAG_MAX_SITES;
+    public static final ModConfigSpec.BooleanValue NATIVE_IMAGE_DIAG_SHALLOW;
     public static final ModConfigSpec.BooleanValue ENABLE_ITEM_ENCHANTMENTS_OPT;
     public static final ModConfigSpec.IntValue ITEM_ENCHANTMENTS_MAX_CACHE_ENTRIES;
     public static final ModConfigSpec.BooleanValue ENABLE_VOXEL_SHAPE_OPT;
@@ -42,6 +44,7 @@ public final class AtmMemOptConfig {
     public static final ModConfigSpec.BooleanValue ENABLE_JEI_PARALLEL_FILTER;
     public static final ModConfigSpec.BooleanValue JEI_LAZY_TOOLTIP_INDEX;
     public static final ModConfigSpec.BooleanValue JEI_SKIP_TOOLTIP_INDEX;
+    public static final ModConfigSpec.IntValue JEI_DEFERRED_SNAPSHOT_TTL_SECONDS;
     public static final ModConfigSpec.BooleanValue ENABLE_JEISTUFF_SKIP_LOOT_SCAN;
     public static final ModConfigSpec.BooleanValue ENABLE_RELOAD_PROFILER;
     public static final ModConfigSpec.BooleanValue ENABLE_BER_DISTANCE_CULLING;
@@ -71,6 +74,7 @@ public final class AtmMemOptConfig {
     public static final ModConfigSpec.BooleanValue ENABLE_SPRITE_MIPMAP_RELEASE;
     public static final ModConfigSpec.BooleanValue ENABLE_BAKED_QUAD_VERTEX_DEDUP;
     public static final ModConfigSpec.IntValue BAKED_QUAD_MAX_CACHE_ENTRIES;
+    public static final ModConfigSpec.IntValue BAKED_QUAD_MAX_QUAD_ENTRIES;
     public static final ModConfigSpec.BooleanValue ENABLE_TAG_ENTRY_OPT;
     public static final ModConfigSpec.IntValue TAG_ENTRY_MAX_CACHE_ENTRIES;
     public static final ModConfigSpec.BooleanValue ENABLE_MOB_AI_THROTTLING;
@@ -125,6 +129,14 @@ public final class AtmMemOptConfig {
                 .comment("Module 5: Track NativeImage allocation stack traces and close() calls for /atmmemopt diag nativeimage. Default OFF due to stack-capture overhead. Requires restart (mixin toggle read at startup).")
                 .define("enableNativeImageDiagnostics", false);
 
+        NATIVE_IMAGE_DIAG_MAX_SITES = builder
+                .comment("Module 5: Maximum number of distinct allocation sites kept in the NativeImage diagnostic map. Additional sites are dropped and counted (0 disables site tracking). Applied on config reload.")
+                .defineInRange("nativeImageDiagMaxSites", 512, 0, 65536);
+
+        NATIVE_IMAGE_DIAG_SHALLOW = builder
+                .comment("Module 5: When true, skip the StackWalker walk and record all NativeImage allocations under a single '<shallow>' site. Applied on config reload.")
+                .define("nativeImageDiagShallow", false);
+
         ENABLE_ITEM_ENCHANTMENTS_OPT = builder
                 .comment("Module 6: Intern immutable ItemEnchantments instances and unify empty instances to ItemEnchantments.EMPTY. Requires restart (mixin toggle read at startup).")
                 .define("enableItemEnchantmentsOpt", true);
@@ -168,6 +180,10 @@ public final class AtmMemOptConfig {
         JEI_SKIP_TOOLTIP_INDEX = builder
                 .comment("Module 8a (optional): Permanently skip building JEI's $tooltip search index. Only effective when enableJeiParallelFilter=true (the JEI mixins are not applied otherwise); no restart needed for this sub-flag itself.")
                 .define("jeiSkipTooltipIndex", false);
+
+        JEI_DEFERRED_SNAPSHOT_TTL_SECONDS = builder
+                .comment("Module 8a: If a deferred TOOLTIPS element snapshot has not been consumed by a '$' search within this many seconds, discard it lazily on the next JEI search/add call (0 disables the TTL). A later '$' search rebuilds the index from JEI's live element view. Requires enableJeiParallelFilter=true and enableJeiLazyTooltipIndex=true to have an effect.")
+                .defineInRange("jeiDeferredSnapshotTtlSeconds", 0, 0, 3600);
 
         ENABLE_JEISTUFF_SKIP_LOOT_SCAN = builder
                 .comment("Module 8b: Skip JEIStuff's synchronous loot table scan on world join. Requires restart (mixin toggle read at startup).")
@@ -311,8 +327,12 @@ public final class AtmMemOptConfig {
                 .define("enableBakedQuadVertexDedup", true);
 
         BAKED_QUAD_MAX_CACHE_ENTRIES = builder
-                .comment("Module 15: Maximum entries in the BakedQuad vertex int[] weak intern cache.")
+                .comment("Module 15: Maximum entries in the BakedQuad vertex int[] weak intern cache. Kept separate from the quad-body cap.")
                 .defineInRange("bakedQuadMaxCacheEntries", 65536, 0, 262144);
+
+        BAKED_QUAD_MAX_QUAD_ENTRIES = builder
+                .comment("Module 17: Maximum entries in the BakedQuad instance weak intern cache (independent of the vertex cache cap).")
+                .defineInRange("bakedQuadMaxQuadEntries", 65536, 0, 262144);
 
         ENABLE_TAG_ENTRY_OPT = builder
                 .comment("Module 16: Intern immutable TagEntry instances across datapack tags.")

@@ -73,6 +73,17 @@ public abstract class JeiElementSearchMixin {
     @Unique
     private volatile PrefixInfo<IListElementInfo<?>, IListElement<?>> atmmemopt$tooltipPrefix;
 
+    @Unique
+    private long atmmemopt$deferredSnapshotNanos;
+
+    /** True after the TTL discarded the snapshot; the next '$' search rebuilds from live elements. */
+    @Unique
+    private boolean atmmemopt$ttlDiscarded;
+
+    /** Live (non-copied) view of JEI's element infos captured at TTL discard time. */
+    @Unique
+    private Collection<IListElementInfo<?>> atmmemopt$liveElementInfos;
+
     @WrapOperation(
             method = "<init>(Lmezz/jei/gui/search/ElementPrefixParser;Ljava/util/Collection;Lmezz/jei/api/runtime/IIngredientManager;)V",
             at = @At(
@@ -110,13 +121,45 @@ public abstract class JeiElementSearchMixin {
                 );
                 if (this.atmmemopt$deferredTooltipElements != null) {
                     this.atmmemopt$tooltipPrefix = invoker.atmmemopt$getPrefixInfo(ElementSearchIndex.TOOLTIPS);
+                    this.atmmemopt$deferredSnapshotNanos = System.nanoTime();
+                    JeiFilterOptHelper.recordDeferredSnapshot(this.atmmemopt$deferredTooltipElements.size());
                 }
             } catch (Throwable t) {
                 this.atmmemopt$deferredTooltipElements = null;
+                JeiFilterOptHelper.recordDeferredConsumed();
                 this.atmmemopt$vanillaRebuild = true;
                 AtmMemOpt.LOGGER.error("[AtmMemOpt] Parallel JEI index building failed; using vanilla rebuilding.", t);
                 original.call(instance, index, elements);
             }
+        }
+    }
+
+    /** Lazy, main-thread-only TTL check (also called from add() so a stale snapshot stops growing). */
+    @Unique
+    private void atmmemopt$expireDeferredSnapshotIfTimedOut() {
+        if (this.atmmemopt$deferredTooltipElements == null || this.atmmemopt$ttlDiscarded) {
+            return;
+        }
+        if (!JeiFilterOptHelper.isDeferredSnapshotExpired(this.atmmemopt$deferredSnapshotNanos)) {
+            return;
+        }
+        synchronized (this) {
+            List<IListElementInfo<?>> deferred = this.atmmemopt$deferredTooltipElements;
+            if (deferred == null
+                    || !JeiFilterOptHelper.isDeferredSnapshotExpired(this.atmmemopt$deferredSnapshotNanos)) {
+                return;
+            }
+            // Do not discard unless a live rebuild source exists, otherwise '$' search would
+            // permanently lose tooltip search functionality.
+            Collection<IListElementInfo<?>> live = JeiFilterOptHelper.getLiveElementInfos();
+            if (live == null) {
+                return;
+            }
+            this.atmmemopt$deferredTooltipElements = null;
+            this.atmmemopt$deferredSnapshotNanos = 0L;
+            this.atmmemopt$ttlDiscarded = true;
+            this.atmmemopt$liveElementInfos = live;
+            JeiFilterOptHelper.recordDeferredDiscarded(deferred.size());
         }
     }
 
@@ -125,8 +168,9 @@ public abstract class JeiElementSearchMixin {
             ElementPrefixParser.TokenInfo tokenInfo,
             CallbackInfoReturnable<Set<IListElement<?>>> cir
     ) {
-        List<IListElementInfo<?>> deferred = this.atmmemopt$deferredTooltipElements;
-        if (deferred == null || tokenInfo == null || this.atmmemopt$tooltipPrefix == null) {
+        atmmemopt$expireDeferredSnapshotIfTimedOut();
+        if ((this.atmmemopt$deferredTooltipElements == null && !this.atmmemopt$ttlDiscarded)
+                || tokenInfo == null || this.atmmemopt$tooltipPrefix == null) {
             return;
         }
         PrefixInfo<IListElementInfo<?>, IListElement<?>> tooltipPrefix = this.atmmemopt$tooltipPrefix;
@@ -139,27 +183,40 @@ public abstract class JeiElementSearchMixin {
         // Atomic test-and-set: only one caller may build; concurrent searches wait here
         // and then observe the cleared deferred snapshot once the winner published the index.
         synchronized (this) {
-            deferred = this.atmmemopt$deferredTooltipElements;
-            if (deferred == null) {
+            List<IListElementInfo<?>> snapshot = this.atmmemopt$deferredTooltipElements;
+            Collection<IListElementInfo<?>> source;
+            if (snapshot != null) {
+                source = snapshot;
+            } else if (this.atmmemopt$ttlDiscarded && this.atmmemopt$liveElementInfos != null) {
+                // TTL path: rebuild from JEI's live view, i.e. vanilla-equivalent behaviour.
+                source = this.atmmemopt$liveElementInfos;
+            } else {
                 return;
             }
             long start = System.nanoTime();
             try {
                 // Build into a local first: only publish a fully built index, and only
-                // then clear the deferred snapshot so a failure can be retried later.
-                PrefixedSearchable<IListElementInfo<?>, IListElement<?>> built = createSearchable(tooltipPrefix, deferred);
+                // then clear the source so a failure can be retried later.
+                PrefixedSearchable<IListElementInfo<?>, IListElement<?>> built = createSearchable(tooltipPrefix, source);
                 this.prefixedSearchables.put(tooltipPrefix, built);
                 this.updateCombinedSearchables();
-                JeiFilterOptHelper.recordLazyTooltipBuild((System.nanoTime() - start) / 1_000_000L, deferred.size());
-                this.atmmemopt$deferredTooltipElements = null;
+                JeiFilterOptHelper.recordLazyTooltipBuild((System.nanoTime() - start) / 1_000_000L, source.size());
+                JeiFilterOptHelper.recordDeferredConsumed();
+                if (snapshot != null) {
+                    this.atmmemopt$deferredTooltipElements = null;
+                    this.atmmemopt$deferredSnapshotNanos = 0L;
+                } else {
+                    this.atmmemopt$ttlDiscarded = false;
+                    this.atmmemopt$liveElementInfos = null;
+                }
             } catch (Throwable t) {
-                // Never propagate into JEI's ingredient-filter path. Keep the deferred
-                // list so the next '$' search retries the build.
+                // Never propagate into JEI's ingredient-filter path. Keep the source
+                // so the next '$' search retries the build.
                 AtmMemOpt.LOGGER.warn("[AtmMemOpt] Failed to lazily build JEI TOOLTIPS index; will retry on next search.", t);
             }
         }
         /*
-         * LIMITATION (A3): the deferred build uses the construction-time snapshot. Entries
+         * LIMITATION (A3): the non-TTL deferred build uses the construction-time snapshot. Entries
          * added later via ElementSearch.add() are written into the empty placeholder
          * storage and are lost when it is replaced here. JEI 1.21.1's PrefixedSearchable
          * only exposes getSearchStorage()/getStrings(); ISearchStorage has no "copy all
@@ -176,10 +233,12 @@ public abstract class JeiElementSearchMixin {
             IIngredientManager ingredientManager,
             CallbackInfo ci
     ) {
+        atmmemopt$expireDeferredSnapshotIfTimedOut();
         synchronized (this) {
             List<IListElementInfo<?>> deferred = this.atmmemopt$deferredTooltipElements;
             if (deferred != null && info != null) {
                 deferred.add(info);
+                JeiFilterOptHelper.recordDeferredSnapshotAdd(deferred.size());
             }
         }
     }
@@ -192,6 +251,10 @@ public abstract class JeiElementSearchMixin {
     ) {
         if (indexes != null && indexes.contains(ElementSearchIndex.TOOLTIPS)) {
             this.atmmemopt$deferredTooltipElements = null;
+            this.atmmemopt$deferredSnapshotNanos = 0L;
+            this.atmmemopt$ttlDiscarded = false;
+            this.atmmemopt$liveElementInfos = null;
+            JeiFilterOptHelper.recordDeferredConsumed();
         }
     }
 }

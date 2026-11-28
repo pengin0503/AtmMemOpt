@@ -3,6 +3,7 @@ package com.atmmemopt;
 import com.atmmemopt.command.AtmMemOptCommands;
 import com.atmmemopt.command.AtmMemOptServerCommands;
 import com.atmmemopt.config.AtmMemOptConfig;
+import com.atmmemopt.diag.NativeImageTracker;
 import com.atmmemopt.opt.climate.ClimateParameterOptHelper;
 import com.atmmemopt.opt.enchant.ItemEnchantmentsOptHelper;
 import com.atmmemopt.opt.irons.SpellContainerOptHelper;
@@ -73,6 +74,9 @@ public class AtmMemOpt {
         DataComponentPatchOptHelper.clearCache();
         ClimateParameterOptHelper.clearCache();
         TagEntryOptHelper.clearCache();
+        // Strong Class keys in the render diag maps must not survive logout/server stop.
+        BerCullingHelper.clearClassStats();
+        EntityCullingHelper.clearClassStats();
         if (ModList.get().isLoaded("irons_spellbooks")) {
             IronsCacheBridge.clearWeakCache();
         }
@@ -126,6 +130,7 @@ public class AtmMemOpt {
         }
 
         private static void refreshConfig() {
+            NativeImageTracker.refreshConfig();
             BerCullingHelper.refreshConfig();
             UnfocusedFpsLimitHelper.refreshConfig();
             ParticleCullingHelper.refreshConfig();

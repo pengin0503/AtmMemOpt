@@ -33,8 +33,11 @@ public final class BakedQuadOptHelper {
     private static final LongAdder ESTIMATED_BYTES_SAVED = new LongAdder();
     private static final LongAdder INTERNED_POST_BAKE = new LongAdder();
     private static final LongAdder EVICTIONS = new LongAdder();
+    private static final LongAdder VERTEX_CAP_REJECTIONS = new LongAdder();
+    private static final LongAdder QUAD_CAP_REJECTIONS = new LongAdder();
 
     private static volatile int cachedMaxEntries = 65536;
+    private static volatile int cachedMaxQuadEntries = 65536;
     private static volatile boolean configLoaded = false;
 
     private BakedQuadOptHelper() {
@@ -43,6 +46,7 @@ public final class BakedQuadOptHelper {
     public static void refreshConfig() {
         try {
             cachedMaxEntries = AtmMemOptConfig.BAKED_QUAD_MAX_CACHE_ENTRIES.get();
+            cachedMaxQuadEntries = AtmMemOptConfig.BAKED_QUAD_MAX_QUAD_ENTRIES.get();
             configLoaded = true;
             drainQueue();
             drainQuadQueue();
@@ -51,7 +55,7 @@ public final class BakedQuadOptHelper {
                 EVICTIONS.add(CACHE.size());
                 CACHE.clear();
             }
-            if (QUAD_CACHE.size() > cachedMaxEntries) {
+            if (QUAD_CACHE.size() > cachedMaxQuadEntries) {
                 EVICTIONS.add(QUAD_CACHE.size());
                 QUAD_CACHE.clear();
             }
@@ -85,6 +89,13 @@ public final class BakedQuadOptHelper {
         return cachedMaxEntries;
     }
 
+    private static int getMaxQuadEntries() {
+        if (!configLoaded) {
+            refreshConfig();
+        }
+        return cachedMaxQuadEntries;
+    }
+
     public static int[] internVertices(int[] vertices) {
         if (vertices == null || vertices.length == 0) {
             return vertices;
@@ -111,6 +122,7 @@ public final class BakedQuadOptHelper {
         }
 
         if (CACHE.size() >= maxEntries) {
+            VERTEX_CAP_REJECTIONS.increment();
             return vertices;
         }
 
@@ -132,6 +144,7 @@ public final class BakedQuadOptHelper {
                 }
             }
             if (CACHE.size() >= maxEntries) {
+                VERTEX_CAP_REJECTIONS.increment();
                 resultHolder[0] = vertices;
                 return null;
             }
@@ -145,7 +158,7 @@ public final class BakedQuadOptHelper {
         if (quad == null || quad.getClass() != BakedQuad.class) {
             return quad;
         }
-        int maxEntries = getMaxEntries();
+        int maxEntries = getMaxQuadEntries();
         if (maxEntries <= 0) {
             return quad;
         }
@@ -167,6 +180,7 @@ public final class BakedQuadOptHelper {
         }
 
         if (QUAD_CACHE.size() >= maxEntries) {
+            QUAD_CAP_REJECTIONS.increment();
             return quad;
         }
 
@@ -185,6 +199,7 @@ public final class BakedQuadOptHelper {
                 }
             }
             if (QUAD_CACHE.size() >= maxEntries) {
+                QUAD_CAP_REJECTIONS.increment();
                 resultHolder[0] = quad;
                 return null;
             }
@@ -282,6 +297,18 @@ public final class BakedQuadOptHelper {
 
     public static int getCachedMaxEntries() {
         return getMaxEntries();
+    }
+
+    public static int getCachedMaxQuadEntries() {
+        return getMaxQuadEntries();
+    }
+
+    public static long getVertexCapRejections() {
+        return VERTEX_CAP_REJECTIONS.sum();
+    }
+
+    public static long getQuadCapRejections() {
+        return QUAD_CAP_REJECTIONS.sum();
     }
 
     /**

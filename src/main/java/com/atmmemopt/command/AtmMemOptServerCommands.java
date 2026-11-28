@@ -12,6 +12,8 @@ import com.atmmemopt.opt.owo.OwoDerivedOptHelper;
 import com.atmmemopt.opt.patch.DataComponentPatchOptHelper;
 import com.atmmemopt.opt.resloc.ResourceLocationOptHelper;
 import com.atmmemopt.opt.shapes.VoxelShapeOptHelper;
+import com.atmmemopt.opt.startup.JeiFilterOptHelper;
+import com.atmmemopt.opt.startup.ReloadProfiler;
 import com.atmmemopt.opt.tags.TagEntryOptHelper;
 import com.atmmemopt.opt.tick.EntityMergeOptHelper;
 import com.atmmemopt.opt.tick.MobAiThrottleHelper;
@@ -110,12 +112,38 @@ public final class AtmMemOptServerCommands {
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
-                "M2 (PatchedComponentMap): %s | hits=%d (applySkip=%d, restoreFast=%d, fromEmpty=%d)",
+                "M2 (PatchedComponentMap): %s | hits=%d (applySkip=%d, restoreFast=%d, fromEmpty=%d, emptyCopy=%d)",
                 formatModuleState("M2", AtmMemOptConfig.ENABLE_PATCHED_COMPONENT_MAP_OPT.get()),
                 PatchedMapOptStats.getTotalHits(),
                 PatchedMapOptStats.getSkippedEmptyApply(),
                 PatchedMapOptStats.getNormalizedEmptyRestore(),
-                PatchedMapOptStats.getFastFromEmptyPatch()
+                PatchedMapOptStats.getFastFromEmptyPatch(),
+                PatchedMapOptStats.getNormalizedEmptyCopy()
+        )).withStyle(ChatFormatting.GREEN));
+
+        boolean jeiLoaded = ModList.get().isLoaded("jei");
+        boolean m8aCfg = jeiLoaded && AtmMemOptConfig.ENABLE_JEI_PARALLEL_FILTER.get();
+        sendAndLog(source, logBuf, Component.literal(String.format(
+                "M8a (JEI Filter): %s | last=%dms, lazyTips=%d, deferred=%d, deferredDiscarded=%d",
+                formatModuleState("M8a", m8aCfg),
+                jeiLoaded ? JeiBridge.getLastBuildMs() : 0L,
+                jeiLoaded ? JeiBridge.getLazyTooltipBuilds() : 0L,
+                jeiLoaded ? JeiBridge.getDeferredElementCount() : 0L,
+                jeiLoaded ? JeiBridge.getDeferredDiscarded() : 0L
+        )).withStyle(ChatFormatting.GREEN));
+
+        boolean m8bCfg = ModList.get().isLoaded("jeistuff") && AtmMemOptConfig.ENABLE_JEISTUFF_SKIP_LOOT_SCAN.get();
+        sendAndLog(source, logBuf, Component.literal(String.format(
+                "M8b (JEIStuff LootScan): %s | skipped=%d",
+                formatModuleState("M8b", m8bCfg),
+                ReloadProfiler.getJeiStuffLootSkipped()
+        )).withStyle(ChatFormatting.GREEN));
+
+        boolean m8cCfg = AtmMemOptConfig.ENABLE_RELOAD_PROFILER.get();
+        sendAndLog(source, logBuf, Component.literal(String.format(
+                "M8c (Reload Profiler): %s | reloadProfiles=%d",
+                formatModuleState("M8c", m8cCfg),
+                ReloadProfiler.getReloadProfilesLogged()
         )).withStyle(ChatFormatting.GREEN));
 
         boolean m3Cfg = ModList.get().isLoaded("irons_spellbooks") && AtmMemOptConfig.ENABLE_IRONS_SPELL_CONTAINER_OPT.get();
@@ -292,6 +320,25 @@ public final class AtmMemOptServerCommands {
 
         private static long getKeptCustomCount() {
             return OwoDerivedOptHelper.getKeptCustomCount();
+        }
+    }
+
+    /** JEI helper has JEI-typed method signatures; keep it behind a non-JEI bridge. */
+    private static final class JeiBridge {
+        private static long getLastBuildMs() {
+            return JeiFilterOptHelper.getLastBuildMs();
+        }
+
+        private static long getLazyTooltipBuilds() {
+            return JeiFilterOptHelper.getLazyTooltipBuilds();
+        }
+
+        private static long getDeferredElementCount() {
+            return JeiFilterOptHelper.getDeferredElementCount();
+        }
+
+        private static long getDeferredDiscarded() {
+            return JeiFilterOptHelper.getDeferredDiscarded();
         }
     }
 

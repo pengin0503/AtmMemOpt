@@ -6,6 +6,7 @@ import net.minecraft.client.renderer.texture.SpriteContents;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -25,6 +26,45 @@ public class SpriteContentsMixin {
 
     @Shadow
     public NativeImage[] byMipLevel;
+
+    /** Set by increaseMipLevel(); consumed by the next upload of the regenerated levels. */
+    @Unique
+    private boolean atmmemopt$mipRegenPending;
+
+    @Inject(
+            method = "increaseMipLevel",
+            at = @At("RETURN")
+    )
+    private void atmmemopt$markRegeneratedMipmaps(int mipLevel, CallbackInfo ci) {
+        this.atmmemopt$mipRegenPending = true;
+    }
+
+    /**
+     * Re-applies the M14 trim after MipmapGenerator replaced byMipLevel. Runs at the end of
+     * upload() (before uploadFirstFrame's own trim hook), so level 0 remains originalImage
+     * and the GPU has already consumed levels 1..N.
+     */
+    @Inject(
+            method = "upload(IIII[Lcom/mojang/blaze3d/platform/NativeImage;)V",
+            at = @At("TAIL")
+    )
+    private void atmmemopt$reTrimRegeneratedMipmaps(
+            int x, int y, int frameX, int frameY, NativeImage[] atlasData, CallbackInfo ci
+    ) {
+        if (!this.atmmemopt$mipRegenPending) {
+            return;
+        }
+        this.atmmemopt$mipRegenPending = false;
+        if (this.byMipLevel == null || this.byMipLevel.length <= 1
+                || !SpriteMipmapReleaseHelper.isStaticSprite((SpriteContents) (Object) this)) {
+            return;
+        }
+        NativeImage[] trimmed = SpriteMipmapReleaseHelper.releaseStaticMipmaps(this.originalImage, this.byMipLevel);
+        if (trimmed.length < this.byMipLevel.length) {
+            this.byMipLevel = trimmed;
+            SpriteMipmapReleaseHelper.recordReTrim();
+        }
+    }
 
     @Inject(
             method = "uploadFirstFrame",

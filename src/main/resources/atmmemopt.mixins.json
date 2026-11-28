@@ -3,6 +3,8 @@
     "iris.PipelineManagerMixin",
     "diag.NativeImageDiagMixin",
     "startup.JeiElementPrefixParserInvoker",
+    "startup.JeiIngredientFilterInvoker",
+    "startup.JeiIngredientFilterRegistrationMixin",
     "startup.JeiElementSearchMixin",
     "render.BlockEntityRenderDispatcherMixin",
     "render.MinecraftFpsLimitMixin",
