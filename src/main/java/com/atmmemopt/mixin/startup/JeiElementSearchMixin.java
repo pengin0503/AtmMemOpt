@@ -74,11 +74,11 @@ public abstract class JeiElementSearchMixin {
     private volatile PrefixInfo<IListElementInfo<?>, IListElement<?>> atmmemopt$tooltipPrefix;
 
     @Unique
-    private long atmmemopt$deferredSnapshotNanos;
+    private volatile long atmmemopt$deferredSnapshotNanos;
 
     /** True after the TTL discarded the snapshot; the next '$' search rebuilds from live elements. */
     @Unique
-    private boolean atmmemopt$ttlDiscarded;
+    private volatile boolean atmmemopt$ttlDiscarded;
 
     /** Live (non-copied) view of JEI's element infos captured at TTL discard time. */
     @Unique

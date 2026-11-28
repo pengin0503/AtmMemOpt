@@ -4,7 +4,8 @@ import com.atmmemopt.config.AtmMemOptConfig;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import java.util.Collection;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
 
@@ -103,10 +104,14 @@ public final class ModelBakeryAuditHelper {
                 if (value == null) {
                     continue;
                 }
-                Method size = value.getClass().getMethod("size");
-                // The map class may be non-public (e.g. Collections.unmodifiableMap).
-                size.setAccessible(true);
-                int count = ((Number) size.invoke(value)).intValue();
+                int count;
+                if (value instanceof Map<?, ?> map) {
+                    count = map.size();
+                } else if (value instanceof Collection<?> collection) {
+                    count = collection.size();
+                } else {
+                    continue;
+                }
                 if (count > 0) {
                     mapsWithEntries++;
                     entries += count;

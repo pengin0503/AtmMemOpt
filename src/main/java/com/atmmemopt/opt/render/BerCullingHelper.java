@@ -12,6 +12,7 @@ import net.minecraft.world.level.block.entity.TheEndGatewayBlockEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import java.lang.ref.WeakReference;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -66,18 +67,36 @@ public final class BerCullingHelper {
         return new ClassValue<>() {
             @Override
             protected ClassValue<Boolean> computeValue(Class<?> blockEntityClass) {
-                return new ClassValue<>() {
-                    @Override
-                    protected Boolean computeValue(Class<?> rendererClass) {
-                        WHITELIST_EVALUATIONS.increment();
-                        return computeWhitelisted(
-                                blockEntityClass,
-                                rendererClass == NULL_RENDERER_CLASS ? null : rendererClass
-                        );
-                    }
-                };
+                return new RendererClassValue(blockEntityClass);
             }
         };
+    }
+
+    /**
+     * Inner ClassValue keyed by renderer class. The BlockEntity class is held weakly:
+     * ClassValue values are pinned by the Class that owns the entry, so a strong reference
+     * here would form a key -> value -> key cycle that pins the BlockEntity class (and its
+     * ClassLoader) forever. A cleared weak reference simply yields a non-whitelisted result.
+     */
+    private static final class RendererClassValue extends ClassValue<Boolean> {
+        private final WeakReference<Class<?>> blockEntityClassRef;
+
+        RendererClassValue(Class<?> blockEntityClass) {
+            this.blockEntityClassRef = new WeakReference<>(blockEntityClass);
+        }
+
+        @Override
+        protected Boolean computeValue(Class<?> rendererClass) {
+            Class<?> blockEntityClass = blockEntityClassRef.get();
+            if (blockEntityClass == null) {
+                return Boolean.FALSE;
+            }
+            WHITELIST_EVALUATIONS.increment();
+            return computeWhitelisted(
+                    blockEntityClass,
+                    rendererClass == NULL_RENDERER_CLASS ? null : rendererClass
+            );
+        }
     }
 
     private BerCullingHelper() {
