@@ -102,7 +102,13 @@ public class AtmMemOptMixinPlugin implements IMixinConfigPlugin {
             return recordAndReturn("M8b", isModPresent("jeistuff") && AtmMemOptConfig.getEarlyBoolean("enableJeiStuffSkipLootScan", true));
         }
         if (relative.equals("startup.SimpleReloadInstanceMixin")) {
-            return recordAndReturn("M8c", AtmMemOptConfig.getEarlyBoolean("enableReloadProfiler", true));
+            boolean reloadProfiler = AtmMemOptConfig.getEarlyBoolean("enableReloadProfiler", true);
+            // M25 reuses this mixin's points; it is only recorded as applied when both its
+            // own toggle and the M8c mixin gate are on (fail closed).
+            if (reloadProfiler && AtmMemOptConfig.getEarlyBoolean("enableReloadArtifactAudit", false)) {
+                recordAndReturn("M25", true);
+            }
+            return recordAndReturn("M8c", reloadProfiler);
         }
 
         // Module 9: Render CPU/GPU optimizations
@@ -162,6 +168,26 @@ public class AtmMemOptMixinPlugin implements IMixinConfigPlugin {
         // Module 21: ItemEntity / ExperienceOrb merge radius optimization
         if (relative.equals("tick.ItemEntityMergeMixin") || relative.equals("tick.ExperienceOrbMergeMixin")) {
             return recordAndReturn("M21", AtmMemOptConfig.getEarlyBoolean("enableEntityMergeOpt", true));
+        }
+
+        // Module 22: plain Style interning (codec + creation paths, never setStyle)
+        if (relative.startsWith("text.")) {
+            return recordAndReturn("M22", AtmMemOptConfig.getEarlyBoolean("enablePlainStyleInterning", true));
+        }
+
+        // Module 23: TagKey / ResourceKey interning
+        if (relative.startsWith("keys.")) {
+            return recordAndReturn("M23", AtmMemOptConfig.getEarlyBoolean("enableTagAndResourceKeyInterning", true));
+        }
+
+        // Module 24: font glyph NativeImage diagnostics (default OFF; no release hook)
+        if (relative.startsWith("font.")) {
+            return recordAndReturn("M24", AtmMemOptConfig.getEarlyBoolean("enableFontNativeImageRelease", false));
+        }
+
+        // Module 26: ModelBakery staging audit (audit only, default OFF)
+        if (relative.startsWith("bakery.")) {
+            return recordAndReturn("M26", AtmMemOptConfig.getEarlyBoolean("enableModelBakeryCleanup", false));
         }
 
         // Fail closed: a mixin added later but not wired into a branch above must not be

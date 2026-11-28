@@ -6,8 +6,11 @@ import com.atmmemopt.config.AtmMemOptConfig;
 import com.atmmemopt.diag.NativeImageTracker;
 import com.atmmemopt.opt.climate.ClimateParameterOptHelper;
 import com.atmmemopt.opt.enchant.ItemEnchantmentsOptHelper;
+import com.atmmemopt.opt.font.FontNativeImageHelper;
 import com.atmmemopt.opt.irons.SpellContainerOptHelper;
+import com.atmmemopt.opt.keys.KeyInternOptHelper;
 import com.atmmemopt.opt.model.BakedQuadOptHelper;
+import com.atmmemopt.opt.model.ModelBakeryAuditHelper;
 import com.atmmemopt.opt.patch.DataComponentPatchOptHelper;
 import com.atmmemopt.opt.render.BerCullingHelper;
 import com.atmmemopt.opt.render.EntityCullingHelper;
@@ -15,7 +18,9 @@ import com.atmmemopt.opt.render.ParticleCullingHelper;
 import com.atmmemopt.opt.render.UnfocusedFpsLimitHelper;
 import com.atmmemopt.opt.resloc.ResourceLocationOptHelper;
 import com.atmmemopt.opt.shapes.VoxelShapeOptHelper;
+import com.atmmemopt.opt.startup.ReloadProfiler;
 import com.atmmemopt.opt.tags.TagEntryOptHelper;
+import com.atmmemopt.opt.text.StyleOptHelper;
 import com.atmmemopt.opt.tick.EntityMergeOptHelper;
 import com.atmmemopt.opt.tick.MobAiThrottleHelper;
 import com.mojang.logging.LogUtils;
@@ -60,6 +65,8 @@ public class AtmMemOpt {
             ItemEnchantmentsOptHelper.clearCache();
             DataComponentPatchOptHelper.clearCache();
             TagEntryOptHelper.clearCache();
+            // M23: registry keys are replaced on tag reload, so drop stale key pairs.
+            KeyInternOptHelper.clearCache();
         });
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
@@ -74,6 +81,8 @@ public class AtmMemOpt {
         DataComponentPatchOptHelper.clearCache();
         ClimateParameterOptHelper.clearCache();
         TagEntryOptHelper.clearCache();
+        StyleOptHelper.clearCache();
+        KeyInternOptHelper.clearCache();
         // Strong Class keys in the render diag maps must not survive logout/server stop.
         BerCullingHelper.clearClassStats();
         EntityCullingHelper.clearClassStats();
@@ -92,6 +101,9 @@ public class AtmMemOpt {
         ResourceLocationOptHelper.refreshConfig();
         ClimateParameterOptHelper.refreshConfig();
         TagEntryOptHelper.refreshConfig();
+        ReloadProfiler.refreshConfig();
+        StyleOptHelper.refreshConfig();
+        KeyInternOptHelper.refreshConfig();
         if (ModList.get().isLoaded("irons_spellbooks")) {
             IronsCacheBridge.refreshConfig();
         }
@@ -119,13 +131,20 @@ public class AtmMemOpt {
             NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut event) -> {
                 clearWorldScopedCaches();
                 BakedQuadOptHelper.clearCache();
+                FontNativeImageHelper.reset();
+                ModelBakeryAuditHelper.reset();
             });
             modEventBus.addListener((RegisterClientReloadListenersEvent event) ->
                     event.registerReloadListener((ResourceManagerReloadListener) resourceManager -> {
                         int cleared = BakedQuadOptHelper.clearCache();
+                        StyleOptHelper.clearCache();
+                        KeyInternOptHelper.clearCache();
                         if (cleared > 0) {
                             LOGGER.debug("[AtmMemOpt] Cleared {} BakedQuad cache entries on resource reload.", cleared);
                         }
+                        // Diagnostics only: reset font counters and audit reachable staging maps.
+                        FontNativeImageHelper.reset();
+                        ModelBakeryAuditHelper.audit();
                     }));
         }
 
@@ -136,6 +155,8 @@ public class AtmMemOpt {
             ParticleCullingHelper.refreshConfig();
             EntityCullingHelper.refreshConfig();
             BakedQuadOptHelper.refreshConfig();
+            FontNativeImageHelper.refreshConfig();
+            ModelBakeryAuditHelper.refreshConfig();
         }
     }
 }

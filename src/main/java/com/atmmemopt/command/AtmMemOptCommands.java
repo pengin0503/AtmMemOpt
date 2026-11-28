@@ -6,7 +6,9 @@ import com.atmmemopt.diag.NativeImageTracker;
 import com.atmmemopt.diag.SpriteMemoryDiagnostics;
 import com.atmmemopt.opt.climate.ClimateParameterOptHelper;
 import com.atmmemopt.opt.enchant.ItemEnchantmentsOptHelper;
+import com.atmmemopt.opt.font.FontNativeImageHelper;
 import com.atmmemopt.opt.iris.IrisCachePurger;
+import com.atmmemopt.opt.keys.KeyInternOptHelper;
 import com.atmmemopt.opt.model.BakedQuadOptHelper;
 import com.atmmemopt.opt.patch.DataComponentPatchOptHelper;
 import com.atmmemopt.opt.render.BerCullingHelper;
@@ -18,6 +20,7 @@ import com.atmmemopt.opt.shapes.VoxelShapeOptHelper;
 import com.atmmemopt.opt.startup.JeiFilterOptHelper;
 import com.atmmemopt.opt.startup.ReloadProfiler;
 import com.atmmemopt.opt.tags.TagEntryOptHelper;
+import com.atmmemopt.opt.text.StyleOptHelper;
 import com.atmmemopt.opt.texture.SpriteMipmapReleaseHelper;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.ChatFormatting;
@@ -144,6 +147,16 @@ public final class AtmMemOptCommands {
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
+                "M24 (Font NativeImage): %s (AUDIT ONLY - no release) | imagesClosed=%d, estFreed=%s, observed=%d, providerCloses=%d, estObserved=%s",
+                AtmMemOptServerCommands.formatModuleState("M24", AtmMemOptConfig.ENABLE_FONT_NATIVE_IMAGE_RELEASE.get()),
+                FontNativeImageHelper.getImagesClosed(),
+                fmtMB(FontNativeImageHelper.getEstimatedBytesFreed()),
+                FontNativeImageHelper.getImagesObserved(),
+                FontNativeImageHelper.getProviderCloses(),
+                fmtMB(FontNativeImageHelper.getEstimatedObservedBytes())
+        )).withStyle(ChatFormatting.GREEN));
+
+        sendAndLog(source, logBuf, Component.literal(String.format(
                 "M15/17 (BakedQuad): %s | vertHits=%d, quadHits=%d, estSaved=%s, vertex=%d/%d, quad=%d/%d, capRej=%d/%d, postBake=%d, evicted=%d",
                 AtmMemOptServerCommands.formatModuleState("M15", AtmMemOptConfig.ENABLE_BAKED_QUAD_VERTEX_DEDUP.get()),
                 BakedQuadOptHelper.getVertexHits(),
@@ -250,10 +263,13 @@ public final class AtmMemOptCommands {
         int m13Cleared = ClimateParameterOptHelper.clearCache();
         int m15Cleared = BakedQuadOptHelper.clearCache();
         int m16Cleared = TagEntryOptHelper.clearCache();
+        int m22Cleared = StyleOptHelper.clearCache();
+        int m23Cleared = KeyInternOptHelper.clearCache();
 
         Component msg = Component.literal(String.format(
-                "[AtmMemOpt] Purged caches: M3=%d, M4=%d, M6=%d, M7=%d, M10=%d, M12=%d, M13=%d, M15=%d, M16=%d",
-                m3Cleared, m4Cleared, m6Cleared, m7Cleared, m10Cleared, m12Cleared, m13Cleared, m15Cleared, m16Cleared
+                "[AtmMemOpt] Purged caches: M3=%d, M4=%d, M6=%d, M7=%d, M10=%d, M12=%d, M13=%d, M15=%d, M16=%d, M22=%d, M23=%d",
+                m3Cleared, m4Cleared, m6Cleared, m7Cleared, m10Cleared, m12Cleared, m13Cleared, m15Cleared, m16Cleared,
+                m22Cleared, m23Cleared
         )).withStyle(ChatFormatting.GREEN);
         source.sendSuccess(() -> msg, false);
         AtmMemOpt.LOGGER.info("{}", msg.getString());

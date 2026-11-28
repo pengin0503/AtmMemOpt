@@ -12,7 +12,9 @@
     "render.EntityRenderDispatcherMixin",
     "texture.SpriteContentsMixin",
     "model.BakedQuadAccessor",
-    "model.FaceBakeryMixin"
+    "model.FaceBakeryMixin",
+    "font.BitmapProviderMixin",
+    "bakery.ModelBakeryMixin"
   ],
   "compatibilityLevel": "JAVA_21",
   "injectors": {
@@ -53,7 +55,12 @@
     "tags.TagEntryMixin",
     "tick.MobAiThrottleMixin",
     "tick.ItemEntityMergeMixin",
-    "tick.ExperienceOrbMergeMixin"
+    "tick.ExperienceOrbMergeMixin",
+    "text.StyleAccessor",
+    "text.StyleMixin",
+    "text.StyleSerializerMixin",
+    "keys.TagKeyMixin",
+    "keys.ResourceKeyMixin"
   ],
   "package": "com.atmmemopt.mixin",
   "plugin": "com.atmmemopt.mixin.AtmMemOptMixinPlugin",

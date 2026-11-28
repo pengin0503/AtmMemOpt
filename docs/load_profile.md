@@ -61,3 +61,4 @@ per-index ms:
 - サーバーデータパック読み込み 22.4 秒のうち **20.5 秒（91.4%）が `AuxRecipeManager`（FastSuite のレシピ登録本体、`apply=16.1秒`）** に集中している。#02〜#05 は並列の prepare フェーズで吸収されており、クリティカルパスはほぼ `AuxRecipeManager` のみ。
 - クライアントリソース読み込みも #01 `ClientModLoader`・#02 `ModelManager` が支配的であり、いずれも安全性を損なわずにスキップできる対象ではないため、データパック／リソースリロード本体には無理に介入しない（安全優先）。
 - 一方、JEI フィルタの `TOOLTIPS` 遅延構築（-14.9秒）と JEIStuff ルート走査スキップ（-5.9秒）の組み合わせにより、ワールド読み込み全体で **約 21 秒の確実・安全な短縮** が見込める。
+- Stage 3 では上記 #01 `AuxRecipeManager` と #02 `ModelManager` について、CPU 時間だけでなく heap 証拠を集めるため M25（リスナー別 heap-used 差分）と M26（`ModelBakery` staging map 数の監査）を追加した。どちらも既定OFFの**診断のみ**で、リロード対象やレシピデータを変更しない（実装詳細は `stage3-report.md`）。

@@ -50,14 +50,19 @@ $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
 | **M16** | `TagEntry` インターン化 | バニラ (`TagEntry`) | `CODEC` / `element()` / `optionalElement()` / `tag()` / `optionalTag()` で生成される不変 `TagEntry` を弱参照キャッシュ（上限 65,536）で共有。 | Phase 7 実装済（未実機テスト） |
 | **M20** | 遠距離 Mob AI Tick 間引き | バニラ (`Mob`) | 最近接プレイヤー距離 48 ブロック超で 1/2、64 ブロック超で 1/4 に `serverAiStep()` を間引き（フェーズ分散付き）。ボス・村人・ペット・`isPersistenceRequired`・カスタム名・搭乗中・戦闘中・ホワイトリストを自動除外。 | Phase 8 実装済（未実機テスト） |
 | **M21** | アイテム / 経験値オーブ マージ半径最適化 | バニラ (`ItemEntity`, `ExperienceOrb`) | 隣接マージ検索半径をバニラ 0.5 ブロックから設定値（デフォルト 1.5 ブロック）へ拡張し、密集ドロップを素早く統合。 | Phase 8 実装済（未実機テスト） |
+| **M22** | plain `Style` インターン化 | バニラ (`Style`, `Style$Serializer`) | `Style#create` と `CODEC` / `TRUSTED_STREAM_CODEC` のデコード結果を、クリック/ホバー/font/insertion を持たない exact-class `Style` のみ weak キャッシュ（上限 65,536）で共有。`Style.EMPTY` を最優先で統一。`MutableComponent#setStyle` はフックしない。 | Stage 3 実装済（未ビルド・未実機テスト） |
+| **M23** | `TagKey` / `ResourceKey` インターン化 | バニラ (`TagKey`, `ResourceKey`) | static factory + codec 生成結果を正規化済み (registry, `ResourceLocation`) ペアの weak キャッシュで共有（2キャッシュとも上限 32,768 を共有）。exact-class のみ、動的レジストリ `Holder` はキーにしない。`TagsUpdatedEvent` でクリア。 | Stage 3 実装済（未ビルド・未実機テスト） |
+| **M24** | フォント glyph `NativeImage` 計測 | バニラ (`BitmapProvider`) | **Stage 3 は診断のみ（既定OFF）**。1.21.1 の `BitmapProvider` は image を保持し `Glyph#upload()` / `isColored()` が再読するため upload 後 close は行わない。`imagesClosed` / `estFreed` は 0 のまま、観測数と vanilla close 数を表示。 | Stage 3 実装済（解放は意図的にスキップ） |
+| **M25** | リロード成果物監査 | バニラ (`SimpleReloadInstance` / `ReloadProfiler`) | **診断のみ（既定OFF、M8c 有効が前提）**。各リスナーの apply 前後の Runtime heap-used 差分を timing と併せて記録し、Top 5 成長リスナーを既存ログ/status に表示。レシピデータやリロード状態は変更しない。 | Stage 3 実装済（未ビルド・未実機テスト） |
+| **M26** | `ModelBakery` staging 監査 | バニラ (`ModelBakery`) | **監査のみ（既定OFF、config 名は cleanup だが cleanup 未実装）**。クライアントリロード完了時に弱参照で保持した直近 bakery の staging map 7 件をリフレクションで数えるのみ。`stagingMapsRetained` / `totalEntries` を表示、状態は一切変更しない。 | Stage 3 実装済（未ビルド・未実機テスト） |
 
 ---
 
 ## 3. コマンド一覧（クライアントコマンド）
 
-- `/atmmemopt status` — Heap / Non-Heap / Metaspace / Old Gen / DirectBuffer 使用量と、M1〜M21 全モジュールの状態・削減カウントをチャット＋ログに出力。
+- `/atmmemopt status` — Heap / Non-Heap / Metaspace / Old Gen / DirectBuffer 使用量と、M1〜M26 全モジュールの状態・削減カウントをチャット＋ログに出力（M24 は M14 行の隣、M25/M26 は共通 status 行）。
 - `/atmmemopt purge-shader-cache` — Iris / `glsl_transformer` のキャッシュとストリーム参照を即時解放し、解放件数を出力。
-- `/atmmemopt purge-caches` — M3 / M4 / M6 / M7 / M10 / M12 / M13 / M15 / M16 のキャッシュを一括パージし、解放件数を出力。
+- `/atmmemopt purge-caches` — M3 / M4 / M6 / M7 / M10 / M12 / M13 / M15 / M16 / M22 / M23 のキャッシュを一括パージし、解放件数を出力（M24–M26 は診断のみでキャッシュなし）。
 - `/atmmemopt diag all` — `status` + `sprites` + `ber` + `entity`（＋M5有効時は `nativeimage`）を 1 回で一括出力。
 - `/atmmemopt diag nativeimage [on|off|reset]` — 未解放 `NativeImage` の呼び出し元 TOP20 を出力（Mixin 自体は Config の `enableNativeImageDiagnostics = true` ＋再起動で有効化）。
 - `/atmmemopt diag ber [reset]` — BER のクラス別描画回数・カリング回数・ホワイトリスト状態の TOP20 を出力。
@@ -115,6 +120,13 @@ mobAiThrottleWhitelist = [ ... ]       # M20
 enableEntityMergeOpt = true            # M21
 itemMergeRadius = 1.5                  # M21
 xpMergeRadius = 1.5                    # M21
+enablePlainStyleInterning = true       # M22
+plainStyleMaxCacheEntries = 65536      # M22
+enableTagAndResourceKeyInterning = true # M23
+tagKeyMaxCacheEntries = 32768          # M23 (TagKey / ResourceKey 両キャッシュで共有)
+enableFontNativeImageRelease = false   # M24 (診断のみ・既定OFF・解放処理なし)
+enableReloadArtifactAudit = false      # M25 (診断のみ・既定OFF・M8c 有効が前提)
+enableModelBakeryCleanup = false       # M26 (監査のみ・既定OFF・cleanup 未実装)
 ```
 
 ---
@@ -133,12 +145,17 @@ xpMergeRadius = 1.5                    # M21
 1. **Phase 8/9 ＋ コードレビュー修正版 JAR の実機テスト（最優先）**
    - `./gradlew --no-daemon build` で `build/libs/atmmemopt-0.1.0.jar` をビルドし、ATM10 環境でテスト。
    - **確認項目:**
-     - `/atmmemopt status`（および専用サーバーで `/atmmemopt-server status`）で M1〜M21 の実際の Mixin 適用状態と各種ヒット数・キャッシュサイズが正しく表示されるか。
+     - `/atmmemopt status`（および専用サーバーで `/atmmemopt-server status`）で M1〜M26 の実際の Mixin 適用状態と各種ヒット数・キャッシュサイズが正しく表示されるか。
      - `/atmmemopt diag sprites` がメモリ使用量の降順で表示され、`/atmmemopt diag ber reset` / `entity reset` で総計と内訳が一致してリセットされるか。
      - F3+T リソースリロード後に `BakedQuadOptHelper` キャッシュが自動クリアされ、メモリリークしないか。
      - M21 でホッパー・半ブロック上下のアイテムが貫通マージしないこと、M20 でリード接続・レイド中モブが間引かれないこと。
 2. **`NativeImage` 44.9万個（#27）の原因調査（推奨）**
    - `enableNativeImageDiagnostics = true` で一度だけ起動し、`/atmmemopt diag nativeimage` で未解放 `NativeImage` の呼び出し元 TOP20 を確認（物理メモリ / Swap 圧迫の調査）。
-3. **関連ドキュメント**
+3. **Stage 3（M22–M26）のビルド＆実機確認**
+   - 本セッションはコード編集のみで、gradle / テスト / コンパイルは未実行。`./gradlew --no-daemon build` でビルドしてから `stage3-report.md` の未検証項目を更新すること。
+   - `/atmmemopt status` / `/atmmemopt-server status` で M22–M26 行が出ること、`purge-caches` に M22/M23 が含まれること、M24 の `imagesClosed=0`（意図的）を確認。
+   - M25/M26 は既定OFF。証拠を取る場合のみ短期間 ON にし、リロード前後のヒープ差分／staging map 数を記録してから OFF に戻す。
+4. **関連ドキュメント**
    - Phase 1 バイトコード調査: `docs/investigation.md`
    - Phase 4 ロード時間解析: `docs/load_profile.md`
+   - Stage 3 実装レポート: `stage3-report.md`

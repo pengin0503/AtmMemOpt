@@ -84,6 +84,13 @@ public final class AtmMemOptConfig {
     public static final ModConfigSpec.BooleanValue ENABLE_ENTITY_MERGE_OPT;
     public static final ModConfigSpec.DoubleValue ITEM_MERGE_RADIUS;
     public static final ModConfigSpec.DoubleValue XP_MERGE_RADIUS;
+    public static final ModConfigSpec.BooleanValue ENABLE_PLAIN_STYLE_INTERNING;
+    public static final ModConfigSpec.IntValue PLAIN_STYLE_MAX_CACHE_ENTRIES;
+    public static final ModConfigSpec.BooleanValue ENABLE_TAG_AND_RESOURCE_KEY_INTERNING;
+    public static final ModConfigSpec.IntValue TAG_KEY_MAX_CACHE_ENTRIES;
+    public static final ModConfigSpec.BooleanValue ENABLE_FONT_NATIVE_IMAGE_RELEASE;
+    public static final ModConfigSpec.BooleanValue ENABLE_RELOAD_ARTIFACT_AUDIT;
+    public static final ModConfigSpec.BooleanValue ENABLE_MODEL_BAKERY_CLEANUP;
 
     private static volatile Map<String, String> earlyValues;
 
@@ -381,6 +388,34 @@ public final class AtmMemOptConfig {
         XP_MERGE_RADIUS = builder
                 .comment("Module 21: Merge search radius (in blocks) for ExperienceOrb (vanilla default is 0.5).")
                 .defineInRange("xpMergeRadius", 1.5D, 0.5D, 6.0D);
+
+        ENABLE_PLAIN_STYLE_INTERNING = builder
+                .comment("Module 22: Intern plain Style instances (no click/hover event, font or insertion) from Style codec/creation paths. Exact net.minecraft.network.chat.Style class only. Requires restart (mixin toggle read at startup).")
+                .define("enablePlainStyleInterning", true);
+
+        PLAIN_STYLE_MAX_CACHE_ENTRIES = builder
+                .comment("Module 22: Maximum entries in the plain Style weak intern cache (0 disables non-empty interning while keeping the Style.EMPTY fast path). Applied on config reload.")
+                .defineInRange("plainStyleMaxCacheEntries", 65536, 0, 262144);
+
+        ENABLE_TAG_AND_RESOURCE_KEY_INTERNING = builder
+                .comment("Module 23: Intern TagKey / ResourceKey instances from their static factories and codecs using canonical (registry, location) keys. Exact classes only; no dynamic-registry Holder objects are used as keys. Requires restart (mixin toggle read at startup).")
+                .define("enableTagAndResourceKeyInterning", true);
+
+        TAG_KEY_MAX_CACHE_ENTRIES = builder
+                .comment("Module 23: Maximum entries in EACH of the two weak intern caches (TagKey and ResourceKey); one cap is deliberately shared by both caches. Applied on config reload.")
+                .defineInRange("tagKeyMaxCacheEntries", 32768, 0, 262144);
+
+        ENABLE_FONT_NATIVE_IMAGE_RELEASE = builder
+                .comment("Module 24: DIAGNOSTICS ONLY in this stage. Vanilla BitmapProvider retains and reuses each glyph NativeImage after upload (Glyph#upload and isColored), so no post-upload close() is performed even when this is true; counters only. Requires restart (mixin toggle read at startup).")
+                .define("enableFontNativeImageRelease", false);
+
+        ENABLE_RELOAD_ARTIFACT_AUDIT = builder
+                .comment("Module 25: DIAGNOSTICS ONLY. Record per-listener heap-used deltas (Runtime before/after each listener's apply task) in addition to M8c timings. Does not clear or modify recipe/reload state; requires enableReloadProfiler=true and a restart.")
+                .define("enableReloadArtifactAudit", false);
+
+        ENABLE_MODEL_BAKERY_CLEANUP = builder
+                .comment("Module 26: AUDIT ONLY - cleanup is NOT implemented in this stage. Counts ModelBakery staging maps still reachable after a client model reload; never clears or modifies ModelBakery state. Requires restart (mixin toggle read at startup).")
+                .define("enableModelBakeryCleanup", false);
 
         builder.pop();
         SPEC = builder.build();

@@ -8,6 +8,8 @@ import com.atmmemopt.opt.climate.ClimateParameterOptHelper;
 import com.atmmemopt.opt.components.PatchedMapOptStats;
 import com.atmmemopt.opt.enchant.ItemEnchantmentsOptHelper;
 import com.atmmemopt.opt.irons.SpellContainerOptHelper;
+import com.atmmemopt.opt.keys.KeyInternOptHelper;
+import com.atmmemopt.opt.model.ModelBakeryAuditHelper;
 import com.atmmemopt.opt.owo.OwoDerivedOptHelper;
 import com.atmmemopt.opt.patch.DataComponentPatchOptHelper;
 import com.atmmemopt.opt.resloc.ResourceLocationOptHelper;
@@ -17,6 +19,7 @@ import com.atmmemopt.opt.startup.ReloadProfiler;
 import com.atmmemopt.opt.tags.TagEntryOptHelper;
 import com.atmmemopt.opt.tick.EntityMergeOptHelper;
 import com.atmmemopt.opt.tick.MobAiThrottleHelper;
+import com.atmmemopt.opt.text.StyleOptHelper;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -272,6 +275,69 @@ public final class AtmMemOptServerCommands {
                 EntityMergeOptHelper.getItemScansExpanded(),
                 EntityMergeOptHelper.getXpScansExpanded()
         )).withStyle(ChatFormatting.GREEN));
+
+        sendAndLog(source, logBuf, Component.literal(String.format(
+                "M22 (Plain Style): %s | hits=%d, emptyUnified=%d, cache=%d/%d, evicted=%d",
+                formatModuleState("M22", AtmMemOptConfig.ENABLE_PLAIN_STYLE_INTERNING.get()),
+                StyleOptHelper.getHits(),
+                StyleOptHelper.getEmptyUnified(),
+                StyleOptHelper.getCacheSize(),
+                StyleOptHelper.getCachedMaxEntries(),
+                StyleOptHelper.getEvictions()
+        )).withStyle(ChatFormatting.GREEN));
+
+        sendAndLog(source, logBuf, Component.literal(String.format(
+                "M23 (TagKey/ResourceKey): %s | tagHits=%d, keyHits=%d, tagCache=%d/%d, keyCache=%d/%d, evicted=%d (shared cap)",
+                formatModuleState("M23", AtmMemOptConfig.ENABLE_TAG_AND_RESOURCE_KEY_INTERNING.get()),
+                KeyInternOptHelper.getTagHits(),
+                KeyInternOptHelper.getResourceKeyHits(),
+                KeyInternOptHelper.getTagCacheSize(),
+                KeyInternOptHelper.getCachedMaxEntries(),
+                KeyInternOptHelper.getResourceKeyCacheSize(),
+                KeyInternOptHelper.getCachedMaxEntries(),
+                KeyInternOptHelper.getEvictions()
+        )).withStyle(ChatFormatting.GREEN));
+
+        StringBuilder growthTop = new StringBuilder();
+        var growth = ReloadProfiler.getLastTopGrowth();
+        if (growth.isEmpty()) {
+            growthTop.append("none");
+        } else {
+            for (int i = 0; i < growth.size(); i++) {
+                if (i > 0) {
+                    growthTop.append("; ");
+                }
+                var g = growth.get(i);
+                growthTop.append(g.name()).append('=').append(fmtMB(g.deltaBytes()));
+            }
+        }
+        boolean m25Cfg = AtmMemOptConfig.ENABLE_RELOAD_PROFILER.get()
+                && AtmMemOptConfig.ENABLE_RELOAD_ARTIFACT_AUDIT.get();
+        sendAndLog(source, logBuf, Component.literal(String.format(
+                "M25 (Reload Artifact Audit): %s (diagnostics only) | audit=%s, sessions=%d, samples=%d, totalGrowth=%s, maxGrowth=%s | top: %s",
+                formatModuleState("M25", m25Cfg),
+                ReloadProfiler.isAuditActive() ? "ON" : "OFF",
+                ReloadProfiler.getAuditSessions(),
+                ReloadProfiler.getAuditSamples(),
+                fmtMB(ReloadProfiler.getTotalGrowthBytes()),
+                fmtMB(ReloadProfiler.getMaxGrowthBytes()),
+                growthTop
+        )).withStyle(ChatFormatting.GREEN));
+
+        long m26Maps = ModelBakeryAuditHelper.getStagingMapsRetained();
+        long m26Entries = ModelBakeryAuditHelper.getTotalEntries();
+        sendAndLog(source, logBuf, Component.literal(String.format(
+                "M26 (ModelBakery Audit): %s (AUDIT ONLY - no cleanup) | audits=%d, unavailable=%d, stagingMapsRetained=%s, totalEntries=%s, bakes=%d/%d, lastBake=%dms, lastAudit=%dms",
+                formatModuleState("M26", AtmMemOptConfig.ENABLE_MODEL_BAKERY_CLEANUP.get()),
+                ModelBakeryAuditHelper.getAudits(),
+                ModelBakeryAuditHelper.getAuditsUnavailable(),
+                m26Maps < 0 ? "N/A" : Long.toString(m26Maps),
+                m26Entries < 0 ? "N/A" : Long.toString(m26Entries),
+                ModelBakeryAuditHelper.getBakesConstructed(),
+                ModelBakeryAuditHelper.getBakesCompleted(),
+                ModelBakeryAuditHelper.getLastBakeMs(),
+                ModelBakeryAuditHelper.getLastAuditMs()
+        )).withStyle(ChatFormatting.GREEN));
     }
 
     private static int executeServerStatus(CommandSourceStack source) {
@@ -291,10 +357,13 @@ public final class AtmMemOptServerCommands {
         int m12Cleared = ResourceLocationOptHelper.clearWeakCache();
         int m13Cleared = ClimateParameterOptHelper.clearCache();
         int m16Cleared = TagEntryOptHelper.clearCache();
+        int m22Cleared = StyleOptHelper.clearCache();
+        int m23Cleared = KeyInternOptHelper.clearCache();
 
         Component msg = Component.literal(String.format(
-                "[AtmMemOpt] Purged server caches: M3=%d, M6=%d, M7=%d, M10=%d, M12=%d, M13=%d, M16=%d",
-                m3Cleared, m6Cleared, m7Cleared, m10Cleared, m12Cleared, m13Cleared, m16Cleared
+                "[AtmMemOpt] Purged server caches: M3=%d, M6=%d, M7=%d, M10=%d, M12=%d, M13=%d, M16=%d, M22=%d, M23=%d",
+                m3Cleared, m6Cleared, m7Cleared, m10Cleared, m12Cleared, m13Cleared, m16Cleared,
+                m22Cleared, m23Cleared
         )).withStyle(ChatFormatting.GREEN);
         source.sendSuccess(() -> msg, false);
         AtmMemOpt.LOGGER.info("{}", msg.getString());
