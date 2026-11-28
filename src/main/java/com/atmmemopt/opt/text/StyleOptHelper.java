@@ -67,7 +67,11 @@ public final class StyleOptHelper {
         if (style.getClickEvent() != null || style.getHoverEvent() != null || style.getInsertion() != null) {
             return style;
         }
-        ResourceLocation font = ((StyleAccessor) style).atmmemopt$getFont();
+        // Without the mixin framework the accessor is not applied, so degrade to no-interning.
+        if (!(style instanceof StyleAccessor accessor)) {
+            return style;
+        }
+        ResourceLocation font = accessor.atmmemopt$getFont();
         if (font != null) {
             return style;
         }
@@ -77,13 +81,17 @@ public final class StyleOptHelper {
         if (color != null) {
             colorValue = color.getValue();
         }
-        boolean bold = style.isBold();
-        boolean italic = style.isItalic();
-        boolean underlined = style.isUnderlined();
-        boolean strikethrough = style.isStrikethrough();
-        boolean obfuscated = style.isObfuscated();
+        // isBold()/isItalic()/... return false for both "inherit" (null) and an explicit
+        // false, so they would wrongly unify an inheriting style with one that disables the
+        // same attribute. Read the nullable fields through the mixin accessor instead.
+        Boolean bold = accessor.atmmemopt$getBold();
+        Boolean italic = accessor.atmmemopt$getItalic();
+        Boolean underlined = accessor.atmmemopt$getUnderlined();
+        Boolean strikethrough = accessor.atmmemopt$getStrikethrough();
+        Boolean obfuscated = accessor.atmmemopt$getObfuscated();
 
-        if (color == null && !bold && !italic && !underlined && !strikethrough && !obfuscated) {
+        if (color == null && bold == null && italic == null && underlined == null
+                && strikethrough == null && obfuscated == null) {
             EMPTY_UNIFIED.increment();
             return Style.EMPTY;
         }
@@ -169,8 +177,9 @@ public final class StyleOptHelper {
         return getMaxEntries();
     }
 
-    private record PlainStyleKey(int colorValue, boolean hasColor, boolean bold, boolean italic,
-                                 boolean underlined, boolean strikethrough, boolean obfuscated) {
+    // Nullable Boolean components are deliberate: null means "inherit", false means "explicitly off".
+    private record PlainStyleKey(int colorValue, boolean hasColor, Boolean bold, Boolean italic,
+                                 Boolean underlined, Boolean strikethrough, Boolean obfuscated) {
     }
 
     private static final class KeyedStyleRef extends WeakReference<Style> {

@@ -117,7 +117,15 @@ public final class ResourceLocationOptHelper {
         // only allocated on the miss/insert path.
         String namespace = rl.getNamespace();
         String path = rl.getPath();
-        KeyedResLocRef fastRef = CACHE.get(LOOKUP_KEY.get().set(namespace, path));
+        LookupKey lookupKey = LOOKUP_KEY.get().set(namespace, path);
+        KeyedResLocRef fastRef;
+        try {
+            fastRef = CACHE.get(lookupKey);
+        } finally {
+            // Do not keep mod namespace/path strings alive in the thread-local between lookups.
+            // The key is re-set() before each reuse, so clearing it here is always safe.
+            lookupKey.clear();
+        }
         if (fastRef != null) {
             ResourceLocation cached = fastRef.get();
             if (cached != null) {
@@ -284,6 +292,12 @@ public final class ResourceLocationOptHelper {
             this.path = path;
             this.hash = 31 * namespace.hashCode() + path.hashCode();
             return this;
+        }
+
+        void clear() {
+            this.namespace = null;
+            this.path = null;
+            this.hash = 0;
         }
 
         @Override
