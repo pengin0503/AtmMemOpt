@@ -105,8 +105,8 @@ public final class AtmMemOptServerCommands {
         sendAndLog(source, logBuf, Component.literal(String.format(
                 "M1 (owo DerivedMap): %s | unwrapped=%d, customKept=%d",
                 formatModuleState("M1", owoCfg),
-                OwoDerivedOptHelper.getUnwrappedCount(),
-                OwoDerivedOptHelper.getKeptCustomCount()
+                ModList.get().isLoaded("owo") ? OwoBridge.getUnwrappedCount() : 0L,
+                ModList.get().isLoaded("owo") ? OwoBridge.getKeptCustomCount() : 0L
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
@@ -122,10 +122,10 @@ public final class AtmMemOptServerCommands {
         sendAndLog(source, logBuf, Component.literal(String.format(
                 "M3 (Iron's SpellContainer): %s | containerHits=%d, slotHits=%d, dataHits=%d, getOrCreateSaved=%d",
                 formatModuleState("M3", m3Cfg),
-                ModList.get().isLoaded("irons_spellbooks") ? SpellContainerOptHelper.getContainerHits() : 0L,
-                ModList.get().isLoaded("irons_spellbooks") ? SpellContainerOptHelper.getSpellSlotHits() : 0L,
-                ModList.get().isLoaded("irons_spellbooks") ? SpellContainerOptHelper.getSpellDataHits() : 0L,
-                ModList.get().isLoaded("irons_spellbooks") ? SpellContainerOptHelper.getGetOrCreateAvoided() : 0L
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getContainerHits() : 0L,
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getSpellSlotHits() : 0L,
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getSpellDataHits() : 0L,
+                ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.getGetOrCreateAvoided() : 0L
         )).withStyle(ChatFormatting.GREEN));
 
         sendAndLog(source, logBuf, Component.literal(String.format(
@@ -213,7 +213,7 @@ public final class AtmMemOptServerCommands {
     }
 
     private static int executeServerPurgeCaches(CommandSourceStack source) {
-        int m3Cleared = ModList.get().isLoaded("irons_spellbooks") ? SpellContainerOptHelper.clearWeakCache() : 0;
+        int m3Cleared = ModList.get().isLoaded("irons_spellbooks") ? IronsSpellbooksBridge.clearWeakCache() : 0;
         int m6Cleared = ItemEnchantmentsOptHelper.clearCache();
         int m7Cleared = VoxelShapeOptHelper.clearWeakCaches();
         int m10Cleared = DataComponentPatchOptHelper.clearCache();
@@ -240,5 +240,37 @@ public final class AtmMemOptServerCommands {
             return "N/A";
         }
         return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
+    }
+
+    private static final class OwoBridge {
+        private static long getUnwrappedCount() {
+            return OwoDerivedOptHelper.getUnwrappedCount();
+        }
+
+        private static long getKeptCustomCount() {
+            return OwoDerivedOptHelper.getKeptCustomCount();
+        }
+    }
+
+    private static final class IronsSpellbooksBridge {
+        private static long getContainerHits() {
+            return SpellContainerOptHelper.getContainerHits();
+        }
+
+        private static long getSpellSlotHits() {
+            return SpellContainerOptHelper.getSpellSlotHits();
+        }
+
+        private static long getSpellDataHits() {
+            return SpellContainerOptHelper.getSpellDataHits();
+        }
+
+        private static long getGetOrCreateAvoided() {
+            return SpellContainerOptHelper.getGetOrCreateAvoided();
+        }
+
+        private static int clearWeakCache() {
+            return SpellContainerOptHelper.clearWeakCache();
+        }
     }
 }
