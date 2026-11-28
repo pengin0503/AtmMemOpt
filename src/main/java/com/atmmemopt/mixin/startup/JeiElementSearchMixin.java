@@ -176,9 +176,11 @@ public abstract class JeiElementSearchMixin {
             IIngredientManager ingredientManager,
             CallbackInfo ci
     ) {
-        List<IListElementInfo<?>> deferred = this.atmmemopt$deferredTooltipElements;
-        if (deferred != null && info != null) {
-            deferred.add(info);
+        synchronized (this) {
+            List<IListElementInfo<?>> deferred = this.atmmemopt$deferredTooltipElements;
+            if (deferred != null && info != null) {
+                deferred.add(info);
+            }
         }
     }
 

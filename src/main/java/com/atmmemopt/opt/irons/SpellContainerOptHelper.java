@@ -24,9 +24,10 @@ import java.util.concurrent.atomic.LongAdder;
 public final class SpellContainerOptHelper {
     private static final int MAX_STRONG_CACHE = 8192;
     private static final int MAX_CONTAINER_CACHE = 32768;
-    /** Legitimate containers are far smaller; clamp corrupt maxSpells values before allocating. */
+    /** Only arrays up to this length are eligible for caching; larger requests are allocated at full size, never shrunk. */
     private static final int MAX_EMPTY_SLOT_LENGTH = 64;
-    private static final int MAX_EMPTY_SLOT_CACHE_ENTRIES = MAX_EMPTY_SLOT_LENGTH + 1;
+    /** Cache holds at most one array per length 1..MAX_EMPTY_SLOT_LENGTH, so this bounds it to that many entries. */
+    private static final int MAX_EMPTY_SLOT_CACHE_ENTRIES = MAX_EMPTY_SLOT_LENGTH;
     private static final SpellSlot[] EMPTY_SLOTS = new SpellSlot[0];
 
     private static final ConcurrentHashMap<SpellDataKey, SpellData> SPELL_DATA_CACHE = new ConcurrentHashMap<>();
@@ -107,20 +108,24 @@ public final class SpellContainerOptHelper {
     }
 
     public static SpellSlot[] getEmptySlotArray(int length) {
-        // The length originates from maxSpells (NBT/network data): clamp it so corrupt
-        // values cannot make us allocate an enormous array or grow the cache without bound.
-        int len = Math.max(0, Math.min(length, MAX_EMPTY_SLOT_LENGTH));
-        if (len == 0) {
+        if (length <= 0) {
             return EMPTY_SLOTS;
         }
-        SpellSlot[] cached = EMPTY_SLOT_ARRAYS.get(len);
+        // Oversized requests are served uncached at their full size, never shrunk:
+        // callers declare a SpellContainer with maxSpells = length, so returning a
+        // shorter array would cause an ArrayIndexOutOfBoundsException. The cap below
+        // only bounds the cache, not the size of an uncached allocation.
+        if (length > MAX_EMPTY_SLOT_LENGTH) {
+            return new SpellSlot[length];
+        }
+        SpellSlot[] cached = EMPTY_SLOT_ARRAYS.get(length);
         if (cached != null) {
             return cached;
         }
         if (EMPTY_SLOT_ARRAYS.size() >= MAX_EMPTY_SLOT_CACHE_ENTRIES) {
-            return new SpellSlot[len];
+            return new SpellSlot[length];
         }
-        return EMPTY_SLOT_ARRAYS.computeIfAbsent(len, SpellSlot[]::new);
+        return EMPTY_SLOT_ARRAYS.computeIfAbsent(length, SpellSlot[]::new);
     }
 
     public static SpellContainer getEmptyContainer(int maxSpells, boolean spellWheel, boolean mustEquip, boolean improved) {

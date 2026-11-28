@@ -81,7 +81,7 @@ public final class AtmMemOptServerCommands {
 
         for (MemoryPoolMXBean pool : ManagementFactory.getMemoryPoolMXBeans()) {
             String name = pool.getName();
-            if (name.contains("Metaspace") || name.contains("Old Gen") || name.contains("G1 Old")) {
+            if (name.contains("Metaspace") || name.contains("Old") || name.contains("ZHeap") || name.contains("Shenandoah")) {
                 MemoryUsage u = pool.getUsage();
                 if (u != null) {
                     sendAndLog(source, logBuf, Component.literal(String.format(
