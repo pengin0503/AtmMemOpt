@@ -3,12 +3,14 @@ package com.atmmemopt.opt.startup;
 import com.atmmemopt.AtmMemOpt;
 import com.atmmemopt.config.AtmMemOptConfig;
 import com.atmmemopt.mixin.startup.JeiElementPrefixParserInvoker;
+import com.atmmemopt.mixin.startup.JeiIngredientFilterInvoker;
 import mezz.jei.common.search.PrefixInfo;
 import mezz.jei.common.search.PrefixedSearchable;
 import mezz.jei.gui.ingredients.IListElement;
 import mezz.jei.gui.ingredients.IListElementInfo;
 import mezz.jei.gui.search.ElementSearchIndex;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumMap;
@@ -34,8 +36,73 @@ public final class JeiFilterOptHelper {
     private static final AtomicLong LAST_BUILD_MS = new AtomicLong();
     private static final AtomicLong BUILD_COUNT = new AtomicLong();
     private static final AtomicLong LAZY_TOOLTIP_BUILDS = new AtomicLong();
+    private static final AtomicLong DEFERRED_ELEMENT_COUNT = new AtomicLong();
+    private static final AtomicLong DEFERRED_DISCARDED = new AtomicLong();
+    /** Weak link to JEI's live element view source; never holds the IngredientFilter alive. */
+    private static volatile WeakReference<JeiIngredientFilterInvoker> ingredientFilterRef = new WeakReference<>(null);
 
     private JeiFilterOptHelper() {
+    }
+
+    public static void registerIngredientFilter(JeiIngredientFilterInvoker filter) {
+        if (filter != null) {
+            ingredientFilterRef = new WeakReference<>(filter);
+        }
+    }
+
+    /**
+     * Returns a live view of JEI's element infos (not a copy), or null when the JEI class
+     * layout changed and the invoker mixin is unavailable.
+     */
+    public static Collection<IListElementInfo<?>> getLiveElementInfos() {
+        JeiIngredientFilterInvoker filter = ingredientFilterRef.get();
+        if (filter == null) {
+            return null;
+        }
+        try {
+            return filter.atmmemopt$getAllElementInfos();
+        } catch (Throwable t) {
+            AtmMemOpt.LOGGER.warn("[AtmMemOpt] Could not read JEI's live element infos; keeping deferred snapshot.", t);
+            return null;
+        }
+    }
+
+    public static boolean isDeferredSnapshotExpired(long takenAtNanos) {
+        if (takenAtNanos <= 0L) {
+            return false;
+        }
+        long ttlSeconds;
+        try {
+            ttlSeconds = AtmMemOptConfig.JEI_DEFERRED_SNAPSHOT_TTL_SECONDS.get();
+        } catch (IllegalStateException ignored) {
+            return false;
+        }
+        return ttlSeconds > 0L && System.nanoTime() - takenAtNanos >= ttlSeconds * 1_000_000_000L;
+    }
+
+    public static void recordDeferredSnapshot(int elementCount) {
+        DEFERRED_ELEMENT_COUNT.set(elementCount);
+    }
+
+    public static void recordDeferredSnapshotAdd(int elementCount) {
+        DEFERRED_ELEMENT_COUNT.set(elementCount);
+    }
+
+    public static void recordDeferredDiscarded(int elementCount) {
+        DEFERRED_DISCARDED.incrementAndGet();
+        DEFERRED_ELEMENT_COUNT.set(0);
+    }
+
+    public static void recordDeferredConsumed() {
+        DEFERRED_ELEMENT_COUNT.set(0);
+    }
+
+    public static long getDeferredElementCount() {
+        return DEFERRED_ELEMENT_COUNT.get();
+    }
+
+    public static long getDeferredDiscarded() {
+        return DEFERRED_DISCARDED.get();
     }
 
     private static boolean isMainThreadOnly(ElementSearchIndex idx) {

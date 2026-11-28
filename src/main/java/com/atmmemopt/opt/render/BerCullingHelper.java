@@ -12,6 +12,7 @@ import net.minecraft.world.level.block.entity.TheEndGatewayBlockEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import java.lang.ref.WeakReference;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,8 +48,56 @@ public final class BerCullingHelper {
     private static volatile List<? extends String> cachedWhitelist = List.of();
     private static volatile boolean configLoaded = false;
 
-    private static final ConcurrentHashMap<WhitelistKey, Boolean> WHITELIST_CACHE = new ConcurrentHashMap<>();
+    /** Sentinel renderer class for BEs whose renderer is null (keeps the composite key semantics). */
+    private static final Class<?> NULL_RENDERER_CLASS = Void.class;
+
+    private static final LongAdder WHITELIST_EVALUATIONS = new LongAdder();
+
+    /**
+     * Two-level ClassValue: outer key is the BlockEntity class, inner key is the renderer
+     * class. This preserves renderer-aware whitelist matching without a strong Class map
+     * or a per-call WhitelistKey allocation. Replaced on config reload to invalidate
+     * cached classifications.
+     */
+    private static volatile ClassValue<ClassValue<Boolean>> whitelistCache = createWhitelistCache();
+
     private static final ConcurrentHashMap<Class<?>, BerStats> CLASS_STATS = new ConcurrentHashMap<>();
+
+    private static ClassValue<ClassValue<Boolean>> createWhitelistCache() {
+        return new ClassValue<>() {
+            @Override
+            protected ClassValue<Boolean> computeValue(Class<?> blockEntityClass) {
+                return new RendererClassValue(blockEntityClass);
+            }
+        };
+    }
+
+    /**
+     * Inner ClassValue keyed by renderer class. The BlockEntity class is held weakly:
+     * ClassValue values are pinned by the Class that owns the entry, so a strong reference
+     * here would form a key -> value -> key cycle that pins the BlockEntity class (and its
+     * ClassLoader) forever. A cleared weak reference simply yields a non-whitelisted result.
+     */
+    private static final class RendererClassValue extends ClassValue<Boolean> {
+        private final WeakReference<Class<?>> blockEntityClassRef;
+
+        RendererClassValue(Class<?> blockEntityClass) {
+            this.blockEntityClassRef = new WeakReference<>(blockEntityClass);
+        }
+
+        @Override
+        protected Boolean computeValue(Class<?> rendererClass) {
+            Class<?> blockEntityClass = blockEntityClassRef.get();
+            if (blockEntityClass == null) {
+                return Boolean.FALSE;
+            }
+            WHITELIST_EVALUATIONS.increment();
+            return computeWhitelisted(
+                    blockEntityClass,
+                    rendererClass == NULL_RENDERER_CLASS ? null : rendererClass
+            );
+        }
+    }
 
     private BerCullingHelper() {
     }
@@ -63,7 +112,7 @@ public final class BerCullingHelper {
             cachedMaxDist = dist;
             cachedMaxDistSq = (double) dist * (double) dist;
             cachedWhitelist = List.copyOf(AtmMemOptConfig.BER_CULLING_WHITELIST.get());
-            WHITELIST_CACHE.clear();
+            whitelistCache = createWhitelistCache();
             configLoaded = true;
         } catch (IllegalStateException ignored) {
             // Config spec not yet loaded
@@ -78,14 +127,8 @@ public final class BerCullingHelper {
 
     /** Both the block entity class and the renderer class take part in whitelist matching. */
     private static boolean isWhitelisted(Class<?> blockEntityClass, Class<?> rendererClass) {
-        WhitelistKey key = new WhitelistKey(blockEntityClass, rendererClass);
-        Boolean cached = WHITELIST_CACHE.get(key);
-        if (cached != null) {
-            return cached;
-        }
-        boolean result = computeWhitelisted(blockEntityClass, rendererClass);
-        WHITELIST_CACHE.put(key, result);
-        return result;
+        ClassValue<Boolean> byRenderer = whitelistCache.get(blockEntityClass);
+        return byRenderer.get(rendererClass != null ? rendererClass : NULL_RENDERER_CLASS);
     }
 
     private static boolean computeWhitelisted(Class<?> blockEntityClass, Class<?> rendererClass) {
@@ -185,8 +228,25 @@ public final class BerCullingHelper {
         return RENDERED_COUNT.sum();
     }
 
-    public static void resetDiag() {
+    /** Drops strong Class keys from diagnostic stats (e.g. on logout/world stop) without resetting totals. */
+    public static void clearClassStats() {
         CLASS_STATS.clear();
+    }
+
+    public static int getClassStatsSize() {
+        return CLASS_STATS.size();
+    }
+
+    /**
+     * Number of whitelist classifications actually computed. ClassValue does not expose its
+     * entry count; each computation corresponds to one newly cached (BE, renderer) pair.
+     */
+    public static long getWhitelistCacheEvaluations() {
+        return WHITELIST_EVALUATIONS.sum();
+    }
+
+    public static void resetDiag() {
+        clearClassStats();
         CULLED_COUNT.reset();
         RENDERED_COUNT.reset();
     }
@@ -208,10 +268,6 @@ public final class BerCullingHelper {
                 .sorted(Comparator.comparingLong((BerDiagSnapshot s) -> s.rendered() + s.culled()).reversed())
                 .limit(limit)
                 .toList();
-    }
-
-    /** Cache key for whitelist classification: patterns may match either class. */
-    private record WhitelistKey(Class<?> blockEntityClass, Class<?> rendererClass) {
     }
 
     private static final class BerStats {

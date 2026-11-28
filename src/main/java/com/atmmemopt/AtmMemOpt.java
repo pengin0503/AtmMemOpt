@@ -3,10 +3,14 @@ package com.atmmemopt;
 import com.atmmemopt.command.AtmMemOptCommands;
 import com.atmmemopt.command.AtmMemOptServerCommands;
 import com.atmmemopt.config.AtmMemOptConfig;
+import com.atmmemopt.diag.NativeImageTracker;
 import com.atmmemopt.opt.climate.ClimateParameterOptHelper;
 import com.atmmemopt.opt.enchant.ItemEnchantmentsOptHelper;
+import com.atmmemopt.opt.font.FontNativeImageHelper;
 import com.atmmemopt.opt.irons.SpellContainerOptHelper;
+import com.atmmemopt.opt.keys.KeyInternOptHelper;
 import com.atmmemopt.opt.model.BakedQuadOptHelper;
+import com.atmmemopt.opt.model.ModelBakeryAuditHelper;
 import com.atmmemopt.opt.patch.DataComponentPatchOptHelper;
 import com.atmmemopt.opt.render.BerCullingHelper;
 import com.atmmemopt.opt.render.EntityCullingHelper;
@@ -14,7 +18,9 @@ import com.atmmemopt.opt.render.ParticleCullingHelper;
 import com.atmmemopt.opt.render.UnfocusedFpsLimitHelper;
 import com.atmmemopt.opt.resloc.ResourceLocationOptHelper;
 import com.atmmemopt.opt.shapes.VoxelShapeOptHelper;
+import com.atmmemopt.opt.startup.ReloadProfiler;
 import com.atmmemopt.opt.tags.TagEntryOptHelper;
+import com.atmmemopt.opt.text.StyleOptHelper;
 import com.atmmemopt.opt.tick.EntityMergeOptHelper;
 import com.atmmemopt.opt.tick.MobAiThrottleHelper;
 import com.mojang.logging.LogUtils;
@@ -52,9 +58,15 @@ public class AtmMemOpt {
 
         NeoForge.EVENT_BUS.addListener((ServerStoppedEvent event) -> clearWorldScopedCaches());
         NeoForge.EVENT_BUS.addListener((TagsUpdatedEvent event) -> {
+            // M3 joins M6/M10/M16 here: Iron's registry objects are replaced on tag reload.
+            if (ModList.get().isLoaded("irons_spellbooks")) {
+                IronsCacheBridge.clearWeakCache();
+            }
             ItemEnchantmentsOptHelper.clearCache();
             DataComponentPatchOptHelper.clearCache();
             TagEntryOptHelper.clearCache();
+            // M23: registry keys are replaced on tag reload, so drop stale key pairs.
+            KeyInternOptHelper.clearCache();
         });
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
@@ -69,6 +81,11 @@ public class AtmMemOpt {
         DataComponentPatchOptHelper.clearCache();
         ClimateParameterOptHelper.clearCache();
         TagEntryOptHelper.clearCache();
+        StyleOptHelper.clearCache();
+        KeyInternOptHelper.clearCache();
+        // Strong Class keys in the render diag maps must not survive logout/server stop.
+        BerCullingHelper.clearClassStats();
+        EntityCullingHelper.clearClassStats();
         if (ModList.get().isLoaded("irons_spellbooks")) {
             IronsCacheBridge.clearWeakCache();
         }
@@ -82,6 +99,14 @@ public class AtmMemOpt {
         VoxelShapeOptHelper.refreshConfig();
         DataComponentPatchOptHelper.refreshConfig();
         ResourceLocationOptHelper.refreshConfig();
+        ClimateParameterOptHelper.refreshConfig();
+        TagEntryOptHelper.refreshConfig();
+        ReloadProfiler.refreshConfig();
+        StyleOptHelper.refreshConfig();
+        KeyInternOptHelper.refreshConfig();
+        if (ModList.get().isLoaded("irons_spellbooks")) {
+            IronsCacheBridge.refreshConfig();
+        }
         MobAiThrottleHelper.refreshConfig();
         EntityMergeOptHelper.refreshConfig();
         if (FMLEnvironment.dist == Dist.CLIENT) {
@@ -93,6 +118,10 @@ public class AtmMemOpt {
         private static void clearWeakCache() {
             SpellContainerOptHelper.clearWeakCache();
         }
+
+        private static void refreshConfig() {
+            SpellContainerOptHelper.refreshConfig();
+        }
     }
 
     private static final class ClientInit {
@@ -102,22 +131,32 @@ public class AtmMemOpt {
             NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut event) -> {
                 clearWorldScopedCaches();
                 BakedQuadOptHelper.clearCache();
+                FontNativeImageHelper.reset();
+                ModelBakeryAuditHelper.reset();
             });
             modEventBus.addListener((RegisterClientReloadListenersEvent event) ->
                     event.registerReloadListener((ResourceManagerReloadListener) resourceManager -> {
                         int cleared = BakedQuadOptHelper.clearCache();
+                        StyleOptHelper.clearCache();
+                        KeyInternOptHelper.clearCache();
                         if (cleared > 0) {
                             LOGGER.debug("[AtmMemOpt] Cleared {} BakedQuad cache entries on resource reload.", cleared);
                         }
+                        // Diagnostics only: reset font counters and audit reachable staging maps.
+                        FontNativeImageHelper.reset();
+                        ModelBakeryAuditHelper.audit();
                     }));
         }
 
         private static void refreshConfig() {
+            NativeImageTracker.refreshConfig();
             BerCullingHelper.refreshConfig();
             UnfocusedFpsLimitHelper.refreshConfig();
             ParticleCullingHelper.refreshConfig();
             EntityCullingHelper.refreshConfig();
             BakedQuadOptHelper.refreshConfig();
+            FontNativeImageHelper.refreshConfig();
+            ModelBakeryAuditHelper.refreshConfig();
         }
     }
 }

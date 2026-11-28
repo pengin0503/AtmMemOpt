@@ -3,14 +3,18 @@
     "iris.PipelineManagerMixin",
     "diag.NativeImageDiagMixin",
     "startup.JeiElementPrefixParserInvoker",
+    "startup.JeiIngredientFilterInvoker",
+    "startup.JeiIngredientFilterRegistrationMixin",
     "startup.JeiElementSearchMixin",
     "render.BlockEntityRenderDispatcherMixin",
     "render.MinecraftFpsLimitMixin",
     "render.ParticleEngineMixin",
     "render.EntityRenderDispatcherMixin",
     "texture.SpriteContentsMixin",
-    "model.BakedQuadMixin",
-    "model.FaceBakeryMixin"
+    "model.BakedQuadAccessor",
+    "model.FaceBakeryMixin",
+    "font.BitmapProviderMixin",
+    "bakery.ModelBakeryMixin"
   ],
   "compatibilityLevel": "JAVA_21",
   "injectors": {
@@ -51,7 +55,11 @@
     "tags.TagEntryMixin",
     "tick.MobAiThrottleMixin",
     "tick.ItemEntityMergeMixin",
-    "tick.ExperienceOrbMergeMixin"
+    "tick.ExperienceOrbMergeMixin",
+    "text.StyleAccessor",
+    "text.StyleMixin",
+    "keys.TagKeyMixin",
+    "keys.ResourceKeyMixin"
   ],
   "package": "com.atmmemopt.mixin",
   "plugin": "com.atmmemopt.mixin.AtmMemOptMixinPlugin",

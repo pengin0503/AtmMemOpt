@@ -12,16 +12,19 @@ import com.atmmemopt.opt.render.UnfocusedFpsLimitHelper;
 import com.atmmemopt.opt.resloc.ResourceLocationOptHelper;
 import com.atmmemopt.opt.shapes.VoxelShapeOptHelper;
 import com.atmmemopt.opt.tick.EntityMergeOptHelper;
+import com.atmmemopt.opt.text.StyleOptHelper;
 import it.unimi.dsi.fastutil.doubles.DoubleArrayList;
 import it.unimi.dsi.fastutil.doubles.DoubleList;
 import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.ThreadingDetector;
 import net.minecraft.world.level.biome.Climate;
 import org.junit.jupiter.api.Test;
 
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -43,6 +46,12 @@ class AtmMemOptHelpersTest {
             Thread.sleep(25);
         }
         return condition.getAsBoolean();
+    }
+
+    private static Object fieldValue(Object target, String name) throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(target);
     }
 
     @Test
@@ -74,6 +83,21 @@ class AtmMemOptHelpersTest {
     }
 
     @Test
+    void testResourceLocationInterningDedupsByNamespaceAndPath() {
+        ResourceLocationOptHelper.clearWeakCache();
+
+        ResourceLocation a = ResourceLocation.fromNamespaceAndPath(new String("dedup_mod"), new String("shared_path"));
+        ResourceLocation b = ResourceLocation.fromNamespaceAndPath(new String("dedup_mod"), new String("shared_path"));
+        ResourceLocation other = ResourceLocation.fromNamespaceAndPath(new String("other_mod"), new String("shared_path"));
+
+        assertSame(a, ResourceLocationOptHelper.intern(a));
+        assertSame(ResourceLocationOptHelper.intern(a), ResourceLocationOptHelper.intern(b));
+        assertNotSame(ResourceLocationOptHelper.intern(a), ResourceLocationOptHelper.intern(other));
+        assertEquals(2, ResourceLocationOptHelper.getCacheSize());
+        ResourceLocationOptHelper.clearWeakCache();
+    }
+
+    @Test
     void testResourceLocationConcurrentInterning() throws Exception {
         ResourceLocationOptHelper.clearWeakCache();
         ExecutorService pool = Executors.newFixedThreadPool(8);
@@ -93,6 +117,51 @@ class AtmMemOptHelpersTest {
         } finally {
             pool.shutdown();
         }
+    }
+
+    @Test
+    void testStyleInterningWithoutMixinEnvironmentIsIdentity() {
+        StyleOptHelper.clearCache();
+
+        // Unit tests run without the Mixin framework, so Style does not implement StyleAccessor
+        // and intern() degrades to a no-op. The extra attribute keeps both styles out of the
+        // Style.EMPTY fast path, proving no unification happens without the accessor.
+        Style disabledBold = Style.EMPTY.withBold(false).withUnderlined(true);
+        Style inheritedBold = Style.EMPTY.withUnderlined(true);
+        assertSame(disabledBold, StyleOptHelper.intern(disabledBold));
+        assertSame(inheritedBold, StyleOptHelper.intern(inheritedBold));
+        assertNotSame(inheritedBold, disabledBold);
+
+        // Style.EMPTY always takes the fast path and is returned as-is.
+        assertSame(Style.EMPTY, StyleOptHelper.intern(Style.EMPTY));
+
+        // The null-vs-false distinction itself requires the mixin environment; it is covered
+        // by the accessor-based key construction (PlainStyleKey), not by this test.
+        StyleOptHelper.clearCache();
+    }
+
+    @Test
+    void testResourceLocationLookupKeyReleasedAfterIntern() throws Exception {
+        ResourceLocationOptHelper.clearWeakCache();
+        String namespace = new String("lookup_retain_mod");
+        String path = new String("lookup_retain_path");
+        ResourceLocationOptHelper.intern(ResourceLocation.fromNamespaceAndPath(namespace, path));
+
+        Field lookupField = ResourceLocationOptHelper.class.getDeclaredField("LOOKUP_KEY");
+        lookupField.setAccessible(true);
+        ThreadLocal<?> lookupThreadLocal = (ThreadLocal<?>) lookupField.get(null);
+        Object key = lookupThreadLocal.get();
+        assertNotNull(key);
+        assertNull(fieldValue(key, "namespace"));
+        assertNull(fieldValue(key, "path"));
+        assertEquals(Integer.valueOf(0), fieldValue(key, "hash"));
+
+        // The thread-local key is reused: the next probe sets it again before clearing it.
+        ResourceLocationOptHelper.intern(ResourceLocation.fromNamespaceAndPath("another_mod", "another_path"));
+        assertSame(key, lookupThreadLocal.get());
+        assertNull(fieldValue(key, "namespace"));
+        assertNull(fieldValue(key, "path"));
+        ResourceLocationOptHelper.clearWeakCache();
     }
 
     @Test

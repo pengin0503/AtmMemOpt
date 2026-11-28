@@ -45,6 +45,10 @@ public final class PatchedMapOptStats {
         return NORMALIZED_EMPTY_RESTORE.sum();
     }
 
+    public static long getNormalizedEmptyCopy() {
+        return NORMALIZED_EMPTY_COPY.sum();
+    }
+
     public static long getFastFromEmptyPatch() {
         return FAST_FROM_EMPTY_PATCH.sum();
     }

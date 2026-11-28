@@ -1,6 +1,7 @@
 package com.atmmemopt.opt.texture;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import net.minecraft.client.renderer.texture.SpriteContents;
 
 import java.lang.reflect.Field;
 import java.util.concurrent.atomic.LongAdder;
@@ -19,7 +20,9 @@ public final class SpriteMipmapReleaseHelper {
     private static final LongAdder SPRITES_TRIMMED = new LongAdder();
     private static final LongAdder IMAGES_CLOSED = new LongAdder();
     private static final LongAdder ESTIMATED_BYTES_FREED = new LongAdder();
+    private static final LongAdder RE_TRIMS = new LongAdder();
     private static final Field PIXELS_FIELD = resolvePixelsField();
+    private static final Field ANIMATED_TEXTURE_FIELD = resolveAnimatedField();
 
     private SpriteMipmapReleaseHelper() {
     }
@@ -32,6 +35,36 @@ public final class SpriteMipmapReleaseHelper {
         } catch (Throwable ignored) {
             return null;
         }
+    }
+
+    private static Field resolveAnimatedField() {
+        try {
+            Field f = SpriteContents.class.getDeclaredField("animatedTexture");
+            f.setAccessible(true);
+            return f;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /** Animated sprites read byMipLevel on every frame; they must never be trimmed. */
+    public static boolean isStaticSprite(SpriteContents sprite) {
+        if (sprite == null || ANIMATED_TEXTURE_FIELD == null) {
+            return false;
+        }
+        try {
+            return ANIMATED_TEXTURE_FIELD.get(sprite) == null;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    public static void recordReTrim() {
+        RE_TRIMS.increment();
+    }
+
+    public static long getReTrims() {
+        return RE_TRIMS.sum();
     }
 
     private static boolean isImageLive(NativeImage img) {

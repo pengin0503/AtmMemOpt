@@ -1,6 +1,7 @@
 package com.atmmemopt.opt.model;
 
 import com.atmmemopt.config.AtmMemOptConfig;
+import com.atmmemopt.mixin.model.BakedQuadAccessor;
 import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.Direction;
@@ -15,6 +16,10 @@ import java.util.concurrent.atomic.LongAdder;
 /**
  * Module 15 & 17: Deduplicates identical BakedQuad vertex int[] arrays (typically int[32] = 144 bytes)
  * and interns identical immutable BakedQuad instances within bounded weak-reference caches.
+ *
+ * Vertex interning is only invoked from FaceBakery#bakeQuad RETURN, after NeoForge's
+ * QuadTransformers.processInPlace mutations are complete. Interning from the BakedQuad
+ * constructor was incorrect because the canonical array was mutated by those transformers.
  */
 public final class BakedQuadOptHelper {
     private static final ConcurrentHashMap<WeakVertexRef, WeakVertexRef> CACHE = new ConcurrentHashMap<>(8192);
@@ -26,8 +31,13 @@ public final class BakedQuadOptHelper {
     private static final LongAdder VERTEX_HITS = new LongAdder();
     private static final LongAdder QUAD_HITS = new LongAdder();
     private static final LongAdder ESTIMATED_BYTES_SAVED = new LongAdder();
+    private static final LongAdder INTERNED_POST_BAKE = new LongAdder();
+    private static final LongAdder EVICTIONS = new LongAdder();
+    private static final LongAdder VERTEX_CAP_REJECTIONS = new LongAdder();
+    private static final LongAdder QUAD_CAP_REJECTIONS = new LongAdder();
 
     private static volatile int cachedMaxEntries = 65536;
+    private static volatile int cachedMaxQuadEntries = 65536;
     private static volatile boolean configLoaded = false;
 
     private BakedQuadOptHelper() {
@@ -36,9 +46,40 @@ public final class BakedQuadOptHelper {
     public static void refreshConfig() {
         try {
             cachedMaxEntries = AtmMemOptConfig.BAKED_QUAD_MAX_CACHE_ENTRIES.get();
+            cachedMaxQuadEntries = AtmMemOptConfig.BAKED_QUAD_MAX_QUAD_ENTRIES.get();
             configLoaded = true;
+            drainQueue();
+            drainQuadQueue();
+            // Lowered caps must take effect immediately, not only on the next insertion.
+            if (CACHE.size() > cachedMaxEntries) {
+                EVICTIONS.add(CACHE.size());
+                CACHE.clear();
+            }
+            if (QUAD_CACHE.size() > cachedMaxQuadEntries) {
+                EVICTIONS.add(QUAD_CACHE.size());
+                QUAD_CACHE.clear();
+            }
         } catch (IllegalStateException ignored) {
         }
+    }
+
+    /**
+     * Called once per FaceBakery#bakeQuad return, after all in-place quad transformations.
+     * The quad cache key uses the final vertex contents, so it is computed after interning.
+     */
+    public static BakedQuad internPostBake(BakedQuad quad) {
+        if (quad == null || quad.getClass() != BakedQuad.class) {
+            return quad;
+        }
+        if (getMaxEntries() > 0 && quad instanceof BakedQuadAccessor acc) {
+            int[] finalVertices = acc.atmmemopt$getVertices();
+            int[] canonical = internVertices(finalVertices);
+            if (canonical != finalVertices) {
+                acc.atmmemopt$setVertices(canonical);
+            }
+            INTERNED_POST_BAKE.increment();
+        }
+        return internQuad(quad);
     }
 
     private static int getMaxEntries() {
@@ -46,6 +87,13 @@ public final class BakedQuadOptHelper {
             refreshConfig();
         }
         return cachedMaxEntries;
+    }
+
+    private static int getMaxQuadEntries() {
+        if (!configLoaded) {
+            refreshConfig();
+        }
+        return cachedMaxQuadEntries;
     }
 
     public static int[] internVertices(int[] vertices) {
@@ -74,11 +122,12 @@ public final class BakedQuadOptHelper {
         }
 
         if (CACHE.size() >= maxEntries) {
+            VERTEX_CAP_REJECTIONS.increment();
             return vertices;
         }
 
-        // Clone before inserting so caller-side post-construction mutations to the original
-        // array cannot corrupt either the map key or the cached canonical array.
+        // Clone before inserting: the cache key and canonical array never alias the caller's
+        // array, so any later mutation by a non-FaceBakery caller cannot corrupt the cache.
         int[] canonical = vertices.clone();
         WeakVertexRef canonicalRef = new WeakVertexRef(canonical, hash, QUEUE);
         final int[][] resultHolder = new int[1][];
@@ -95,6 +144,7 @@ public final class BakedQuadOptHelper {
                 }
             }
             if (CACHE.size() >= maxEntries) {
+                VERTEX_CAP_REJECTIONS.increment();
                 resultHolder[0] = vertices;
                 return null;
             }
@@ -108,7 +158,7 @@ public final class BakedQuadOptHelper {
         if (quad == null || quad.getClass() != BakedQuad.class) {
             return quad;
         }
-        int maxEntries = getMaxEntries();
+        int maxEntries = getMaxQuadEntries();
         if (maxEntries <= 0) {
             return quad;
         }
@@ -130,6 +180,7 @@ public final class BakedQuadOptHelper {
         }
 
         if (QUAD_CACHE.size() >= maxEntries) {
+            QUAD_CAP_REJECTIONS.increment();
             return quad;
         }
 
@@ -148,6 +199,7 @@ public final class BakedQuadOptHelper {
                 }
             }
             if (QUAD_CACHE.size() >= maxEntries) {
+                QUAD_CAP_REJECTIONS.increment();
                 resultHolder[0] = quad;
                 return null;
             }
@@ -225,6 +277,14 @@ public final class BakedQuadOptHelper {
         return ESTIMATED_BYTES_SAVED.sum();
     }
 
+    public static long getInternedPostBake() {
+        return INTERNED_POST_BAKE.sum();
+    }
+
+    public static long getEvictions() {
+        return EVICTIONS.sum();
+    }
+
     public static int getCacheSize() {
         drainQueue();
         return CACHE.size();
@@ -237,6 +297,18 @@ public final class BakedQuadOptHelper {
 
     public static int getCachedMaxEntries() {
         return getMaxEntries();
+    }
+
+    public static int getCachedMaxQuadEntries() {
+        return getMaxQuadEntries();
+    }
+
+    public static long getVertexCapRejections() {
+        return VERTEX_CAP_REJECTIONS.sum();
+    }
+
+    public static long getQuadCapRejections() {
+        return QUAD_CAP_REJECTIONS.sum();
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.atmmemopt.opt.irons;
 
+import com.atmmemopt.config.AtmMemOptConfig;
 import com.atmmemopt.mixin.irons.SpellContainerAccessor;
 import io.redspace.ironsspellbooks.api.spells.AbstractSpell;
 import io.redspace.ironsspellbooks.api.spells.ISpellContainer;
@@ -20,14 +21,11 @@ import java.util.concurrent.atomic.LongAdder;
  *
  * NOTE: SpellData#equals intentionally ignores the 'locked' field in Iron's Spellbooks,
  * so our interning keys explicitly include (spell, spellLevel, locked).
+ *
+ * Stage 1: all five caches (including the four strong ones) are cleared together on
+ * purge / world stop / tag reload, and their caps are configurable.
  */
 public final class SpellContainerOptHelper {
-    private static final int MAX_STRONG_CACHE = 8192;
-    private static final int MAX_CONTAINER_CACHE = 32768;
-    /** Only arrays up to this length are eligible for caching; larger requests are allocated at full size, never shrunk. */
-    private static final int MAX_EMPTY_SLOT_LENGTH = 64;
-    /** Cache holds at most one array per length 1..MAX_EMPTY_SLOT_LENGTH, so this bounds it to that many entries. */
-    private static final int MAX_EMPTY_SLOT_CACHE_ENTRIES = MAX_EMPTY_SLOT_LENGTH;
     private static final SpellSlot[] EMPTY_SLOTS = new SpellSlot[0];
 
     private static final ConcurrentHashMap<SpellDataKey, SpellData> SPELL_DATA_CACHE = new ConcurrentHashMap<>();
@@ -42,8 +40,67 @@ public final class SpellContainerOptHelper {
     private static final LongAdder SPELL_SLOT_HITS = new LongAdder();
     private static final LongAdder CONTAINER_HITS = new LongAdder();
     private static final LongAdder GET_OR_CREATE_AVOIDED = new LongAdder();
+    private static final LongAdder EVICTIONS = new LongAdder();
+
+    private static volatile int cachedMaxStrongEntries = 8192;
+    private static volatile int cachedMaxContainerEntries = 32768;
+    private static volatile int cachedMaxEmptySlotLength = 64;
+    private static volatile boolean configLoaded = false;
 
     private SpellContainerOptHelper() {
+    }
+
+    public static void refreshConfig() {
+        try {
+            cachedMaxStrongEntries = AtmMemOptConfig.SPELL_CONTAINER_STRONG_CACHE_MAX_ENTRIES.get();
+            cachedMaxContainerEntries = AtmMemOptConfig.SPELL_CONTAINER_CACHE_MAX_ENTRIES.get();
+            cachedMaxEmptySlotLength = AtmMemOptConfig.SPELL_CONTAINER_EMPTY_SLOT_MAX_LENGTH.get();
+            configLoaded = true;
+            drainQueue();
+            // Strong caches must shrink immediately when their cap is lowered.
+            if (SPELL_DATA_CACHE.size() > cachedMaxStrongEntries) {
+                EVICTIONS.add(SPELL_DATA_CACHE.size());
+                SPELL_DATA_CACHE.clear();
+            }
+            if (SPELL_SLOT_CACHE.size() > cachedMaxStrongEntries) {
+                EVICTIONS.add(SPELL_SLOT_CACHE.size());
+                SPELL_SLOT_CACHE.clear();
+            }
+            if (EMPTY_CONTAINER_CACHE.size() > cachedMaxStrongEntries) {
+                EVICTIONS.add(EMPTY_CONTAINER_CACHE.size());
+                EMPTY_CONTAINER_CACHE.clear();
+            }
+            if (EMPTY_SLOT_ARRAYS.size() > cachedMaxEmptySlotLength) {
+                EVICTIONS.add(EMPTY_SLOT_ARRAYS.size());
+                EMPTY_SLOT_ARRAYS.clear();
+            }
+            if (CONTAINER_CACHE.size() > cachedMaxContainerEntries) {
+                EVICTIONS.add(CONTAINER_CACHE.size());
+                CONTAINER_CACHE.clear();
+            }
+        } catch (IllegalStateException ignored) {
+        }
+    }
+
+    private static int getMaxStrongEntries() {
+        if (!configLoaded) {
+            refreshConfig();
+        }
+        return cachedMaxStrongEntries;
+    }
+
+    private static int getMaxContainerEntries() {
+        if (!configLoaded) {
+            refreshConfig();
+        }
+        return cachedMaxContainerEntries;
+    }
+
+    private static int getMaxEmptySlotLength() {
+        if (!configLoaded) {
+            refreshConfig();
+        }
+        return cachedMaxEmptySlotLength;
     }
 
     public static SpellData internSpellData(SpellData data) {
@@ -66,7 +123,7 @@ public final class SpellContainerOptHelper {
             SPELL_DATA_HITS.increment();
             return existing;
         }
-        if (SPELL_DATA_CACHE.size() < MAX_STRONG_CACHE) {
+        if (SPELL_DATA_CACHE.size() < getMaxStrongEntries()) {
             SpellData prev = SPELL_DATA_CACHE.putIfAbsent(key, data);
             if (prev != null) {
                 SPELL_DATA_HITS.increment();
@@ -90,7 +147,7 @@ public final class SpellContainerOptHelper {
             return existing;
         }
         SpellSlot created = new SpellSlot(internedData, index);
-        if (SPELL_SLOT_CACHE.size() < MAX_STRONG_CACHE) {
+        if (SPELL_SLOT_CACHE.size() < getMaxStrongEntries()) {
             SpellSlot prev = SPELL_SLOT_CACHE.putIfAbsent(key, created);
             if (prev != null) {
                 SPELL_SLOT_HITS.increment();
@@ -115,14 +172,14 @@ public final class SpellContainerOptHelper {
         // callers declare a SpellContainer with maxSpells = length, so returning a
         // shorter array would cause an ArrayIndexOutOfBoundsException. The cap below
         // only bounds the cache, not the size of an uncached allocation.
-        if (length > MAX_EMPTY_SLOT_LENGTH) {
+        if (length > getMaxEmptySlotLength()) {
             return new SpellSlot[length];
         }
         SpellSlot[] cached = EMPTY_SLOT_ARRAYS.get(length);
         if (cached != null) {
             return cached;
         }
-        if (EMPTY_SLOT_ARRAYS.size() >= MAX_EMPTY_SLOT_CACHE_ENTRIES) {
+        if (EMPTY_SLOT_ARRAYS.size() >= getMaxEmptySlotLength()) {
             return new SpellSlot[length];
         }
         return EMPTY_SLOT_ARRAYS.computeIfAbsent(length, SpellSlot[]::new);
@@ -137,7 +194,7 @@ public final class SpellContainerOptHelper {
         }
         SpellSlot[] sharedEmptySlots = getEmptySlotArray(maxSpells);
         SpellContainer created = new SpellContainer(maxSpells, spellWheel, mustEquip, improved, sharedEmptySlots);
-        if (EMPTY_CONTAINER_CACHE.size() < MAX_STRONG_CACHE) {
+        if (EMPTY_CONTAINER_CACHE.size() < getMaxStrongEntries()) {
             SpellContainer prev = EMPTY_CONTAINER_CACHE.putIfAbsent(key, created);
             if (prev != null) {
                 CONTAINER_HITS.increment();
@@ -199,7 +256,7 @@ public final class SpellContainerOptHelper {
             }
         }
 
-        if (CONTAINER_CACHE.size() >= MAX_CONTAINER_CACHE) {
+        if (CONTAINER_CACHE.size() >= getMaxContainerEntries()) {
             return defensiveCopy
                     ? new SpellContainer(maxSpells, spellWheel, mustEquip, improved, normalized)
                     : sc;
@@ -220,7 +277,7 @@ public final class SpellContainerOptHelper {
             SpellContainer toCache = defensiveCopy
                     ? new SpellContainer(maxSpells, spellWheel, mustEquip, improved, normalized)
                     : sc;
-            if (CONTAINER_CACHE.size() >= MAX_CONTAINER_CACHE) {
+            if (CONTAINER_CACHE.size() >= getMaxContainerEntries()) {
                 resultHolder[0] = toCache;
                 return null;
             }
@@ -239,8 +296,16 @@ public final class SpellContainerOptHelper {
     }
 
     public static int clearWeakCache() {
-        int removed = CONTAINER_CACHE.size();
+        int removed = CONTAINER_CACHE.size()
+                + SPELL_DATA_CACHE.size()
+                + SPELL_SLOT_CACHE.size()
+                + EMPTY_CONTAINER_CACHE.size()
+                + EMPTY_SLOT_ARRAYS.size();
         CONTAINER_CACHE.clear();
+        SPELL_DATA_CACHE.clear();
+        SPELL_SLOT_CACHE.clear();
+        EMPTY_CONTAINER_CACHE.clear();
+        EMPTY_SLOT_ARRAYS.clear();
         while (CONTAINER_QUEUE.poll() != null) {
             // drain
         }
@@ -261,6 +326,43 @@ public final class SpellContainerOptHelper {
 
     public static long getGetOrCreateAvoided() {
         return GET_OR_CREATE_AVOIDED.sum();
+    }
+
+    public static long getEvictions() {
+        return EVICTIONS.sum();
+    }
+
+    public static int getSpellDataCacheSize() {
+        return SPELL_DATA_CACHE.size();
+    }
+
+    public static int getSpellSlotCacheSize() {
+        return SPELL_SLOT_CACHE.size();
+    }
+
+    public static int getEmptyContainerCacheSize() {
+        return EMPTY_CONTAINER_CACHE.size();
+    }
+
+    public static int getEmptySlotArraysSize() {
+        return EMPTY_SLOT_ARRAYS.size();
+    }
+
+    public static int getContainerCacheSize() {
+        drainQueue();
+        return CONTAINER_CACHE.size();
+    }
+
+    public static int getCachedMaxStrongEntries() {
+        return getMaxStrongEntries();
+    }
+
+    public static int getCachedMaxContainerEntries() {
+        return getMaxContainerEntries();
+    }
+
+    public static int getCachedMaxEmptySlotLength() {
+        return getMaxEmptySlotLength();
     }
 
     private static final class KeyedContainerRef extends WeakReference<SpellContainer> {

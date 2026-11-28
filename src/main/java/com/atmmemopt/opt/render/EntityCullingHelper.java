@@ -31,8 +31,22 @@ public final class EntityCullingHelper {
     private static volatile List<? extends String> cachedWhitelist = List.of();
     private static volatile boolean configLoaded = false;
 
-    private static final ConcurrentHashMap<Class<?>, Boolean> WHITELIST_CACHE = new ConcurrentHashMap<>();
+    private static final LongAdder WHITELIST_EVALUATIONS = new LongAdder();
+
+    /** Class-keyed whitelist cache with weak class keys, replaced on config reload. */
+    private static volatile ClassValue<Boolean> whitelistCache = createWhitelistCache();
+
     private static final ConcurrentHashMap<Class<?>, EntityStats> CLASS_STATS = new ConcurrentHashMap<>();
+
+    private static ClassValue<Boolean> createWhitelistCache() {
+        return new ClassValue<>() {
+            @Override
+            protected Boolean computeValue(Class<?> type) {
+                WHITELIST_EVALUATIONS.increment();
+                return computeWhitelisted(type);
+            }
+        };
+    }
 
     private EntityCullingHelper() {
     }
@@ -49,7 +63,7 @@ public final class EntityCullingHelper {
             cachedXpDist = xp;
             cachedXpDistSq = (double) xp * (double) xp;
             cachedWhitelist = List.copyOf(AtmMemOptConfig.ENTITY_CULLING_WHITELIST.get());
-            WHITELIST_CACHE.clear();
+            whitelistCache = createWhitelistCache();
             configLoaded = true;
         } catch (IllegalStateException ignored) {
         }
@@ -62,13 +76,7 @@ public final class EntityCullingHelper {
     }
 
     private static boolean isWhitelisted(Class<?> type) {
-        Boolean cached = WHITELIST_CACHE.get(type);
-        if (cached != null) {
-            return cached;
-        }
-        boolean result = computeWhitelisted(type);
-        WHITELIST_CACHE.put(type, result);
-        return result;
+        return whitelistCache.get(type);
     }
 
     private static boolean computeWhitelisted(Class<?> type) {
@@ -156,8 +164,22 @@ public final class EntityCullingHelper {
         return RENDERED_COUNT.sum();
     }
 
-    public static void resetDiag() {
+    /** Drops strong Class keys from diagnostic stats (e.g. on logout/world stop) without resetting totals. */
+    public static void clearClassStats() {
         CLASS_STATS.clear();
+    }
+
+    public static int getClassStatsSize() {
+        return CLASS_STATS.size();
+    }
+
+    /** Number of whitelist classifications actually computed (one per newly cached class). */
+    public static long getWhitelistCacheEvaluations() {
+        return WHITELIST_EVALUATIONS.sum();
+    }
+
+    public static void resetDiag() {
+        clearClassStats();
         CULLED_COUNT.reset();
         RENDERED_COUNT.reset();
     }
